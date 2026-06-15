@@ -433,6 +433,23 @@ function goldenNote(wy, pan = 0, vol = 0.03) {
   }
 }
 
+/* a soft sustained chord for the two-finger aurora ribbon — a warm pad of
+   stacked fifths, pitched by where on screen you're painting. fuller and
+   rounder than the single pen note, so two fingers sound bigger than one. */
+function auroraChord(pan = 0, wy = 0, bright = 1) {
+  resumeAudio();
+  const top = cam.y - (H / 2) / cam.zoom;
+  const ny = 1 - Math.max(0, Math.min(1, (wy - top) / (H / cam.zoom)));
+  const roots = [60, 64, 67, 72, 76];                 // a gentle C-major ladder
+  const r = roots[Math.round(ny * (roots.length - 1))];
+  const t = ctx.currentTime + 0.02;
+  voice(r, t, 0.9, { wave: 'triangle', vol: 0.016 * bright, attack: 0.06, send: 0.8, pan, detune: -6 });
+  voice(r + 7, t, 0.9, { wave: 'triangle', vol: 0.013 * bright, attack: 0.07, send: 0.82, pan: pan * -0.5, detune: 6 });
+  voice(r + 12, t, 0.7, { wave: 'sine', vol: 0.011 * bright, attack: 0.05, send: 0.85, pan });
+  if (Math.random() < 0.4)
+    voice(r + 19, t + 0.04, 0.5, { wave: 'sine', vol: 0.006 * bright, attack: 0.04, send: 0.88, pan: pan * 0.4 });
+}
+
 /* a tiny soft "a-choo" — a little squeak wind-up, then a downward pop */
 function sneezeChime(pan = 0) {
   resumeAudio();
@@ -601,10 +618,11 @@ function spawn(x, y, opts = {}) {
     hue = 50,
     sat = 30,
     glint = false,
+    vivid = false,
     drag = 0.92,
     grav = -6,
   } = opts;
-  const p = { x, y, vx, vy, life, max: life, size, hue, sat, glint, drag, grav };
+  const p = { x, y, vx, vy, life, max: life, size, hue, sat, glint, vivid, drag, grav };
   // O(1) eviction: overwrite an old particle instead of the O(n) Array.shift().
   // Additive ('lighter') blending is order-independent, so order needn't be preserved.
   if (parts.length < MAX) parts.push(p);
@@ -646,29 +664,38 @@ function ring(x, y, n, radius, opts = {}) {
 // exact same gradient once per (hue, sat) bucket into a small canvas, then the
 // hot path is just a GPU drawImage with zero allocation.
 const SPR_PX = 64, SPR_R = 32, HUE_STEPS = 36, SPR_SATS = [40, 62, 82];
-const sparkCache = [];
-function makeSpark(hue, sat) {
+const sparkCache = [], sparkCacheV = [];
+function makeSpark(hue, sat, vivid) {
   const c = document.createElement('canvas'); c.width = c.height = SPR_PX;
   const sg = c.getContext('2d');
   const grd = sg.createRadialGradient(SPR_R, SPR_R, 0, SPR_R, SPR_R, SPR_R);
-  grd.addColorStop(0, `hsla(${hue}, ${sat}%, 96%, 1)`);
-  grd.addColorStop(0.4, `hsla(${hue}, ${sat}%, 78%, 0.55)`);
-  grd.addColorStop(1, `hsla(${hue}, ${sat}%, 60%, 0)`);
+  if (vivid) {
+    // a saturated, lower-lightness core so the colour survives additive blending
+    // over a lit sky instead of washing to white (used by the rainbow ribbon).
+    grd.addColorStop(0, `hsla(${hue}, ${sat}%, 78%, 1)`);
+    grd.addColorStop(0.35, `hsla(${hue}, ${sat}%, 56%, 0.8)`);
+    grd.addColorStop(1, `hsla(${hue}, ${sat}%, 50%, 0)`);
+  } else {
+    grd.addColorStop(0, `hsla(${hue}, ${sat}%, 96%, 1)`);
+    grd.addColorStop(0.4, `hsla(${hue}, ${sat}%, 78%, 0.55)`);
+    grd.addColorStop(1, `hsla(${hue}, ${sat}%, 60%, 0)`);
+  }
   sg.fillStyle = grd; sg.fillRect(0, 0, SPR_PX, SPR_PX);
   return c;
 }
-function sparkSprite(hue, sat) {
+function sparkSprite(hue, sat, vivid) {
   const hi = Math.round((((hue % 360) + 360) % 360) / (360 / HUE_STEPS)) % HUE_STEPS;
   const si = sat < 51 ? 0 : sat < 71 ? 1 : 2;
   const idx = hi * 3 + si;
-  return sparkCache[idx] || (sparkCache[idx] = makeSpark(hi * (360 / HUE_STEPS), SPR_SATS[si]));
+  const cache = vivid ? sparkCacheV : sparkCache;
+  return cache[idx] || (cache[idx] = makeSpark(hi * (360 / HUE_STEPS), SPR_SATS[si], vivid));
 }
-function drawSparkle(x, y, size, hue, sat, alpha, glint) {
+function drawSparkle(x, y, size, hue, sat, alpha, glint, vivid) {
   if (alpha <= 0) return;
   g.globalCompositeOperation = 'lighter';
   const rr = size * 3;
   g.globalAlpha = alpha < 1 ? alpha : 1;       // sprite bakes the falloff; globalAlpha scales it
-  g.drawImage(sparkSprite(hue, sat), x - rr, y - rr, rr * 2, rr * 2);
+  g.drawImage(sparkSprite(hue, sat, vivid), x - rr, y - rr, rr * 2, rr * 2);
   g.globalAlpha = 1;
 
   if (glint) {
@@ -1355,7 +1382,7 @@ let started = false;
 let stroke = null;          // the stroke currently being drawn
 const casts = [];           // finished strokes "playing back" into effects
 let petLevel = 0;           // how much she's being petted (drives content sighs)
-let lastGiggle = 0, lastPenNote = 0, lastBreath = 0, lastCurious = 0, lastTickle = 0, lastPurr = 0;
+let lastGiggle = 0, lastPenNote = 0, lastBreath = 0, lastCurious = 0, lastTickle = 0, lastPurr = 0, lastRibbonNote = 0;
 let lastAntic = 0, anticCooldown = 8;   // spontaneous little self-entertaining flourishes
 
 /* a spontaneous little antic when she's content but unoccupied — never the same twice in a row */
@@ -1443,7 +1470,7 @@ function rouse() {
 }
 
 function onDown(e) {
-  if (pinch) return;                       // ignore taps mid pinch-zoom
+  if (pinch || ribbon || twoFinger) return;   // ignore the first finger mid two-finger gesture
   const s = getXY(e);
   const p = screenToWorld(s.x, s.y);
   wake();
@@ -1498,6 +1525,7 @@ function onDown(e) {
 const panOf = wx => Math.max(-1, Math.min(1, (wx - cam.x) / ((W / 2) / cam.zoom || 1)));
 
 function onMove(e) {
+  if (pinch || ribbon || twoFinger) return;   // the two-finger handlers own this gesture
   const s = getXY(e);
   const p = screenToWorld(s.x, s.y);
   pointer.x = p.x; pointer.y = p.y;
@@ -1795,25 +1823,91 @@ window.addEventListener('wheel', (e) => {
   setZoom(cam.targetZoom * factor, e.clientX, e.clientY);
 }, { passive: false });
 
-// two-finger pinch on touch screens
-let pinch = null;
+// two-finger gestures: pull apart / together = pinch-zoom, sweep across with the
+// gap held steady = paint a luminous aurora ribbon between your fingertips.
+let pinch = null;            // an active zoom gesture (its previous frame)
+let ribbon = null;          // an active aurora-ribbon gesture (its previous frame)
+let twoFinger = null;       // a fresh two-finger touch whose intent isn't decided yet
+let ribbonPhase = 0;        // hue phase that advances as the ribbon sweeps
+let ribbonLast = null;      // screen centroid of the last band laid (to space them out)
 function touchInfo(e) {
   const a = e.touches[0], b = e.touches[1];
   const dx = b.clientX - a.clientX, dy = b.clientY - a.clientY;
   return { dist: Math.hypot(dx, dy) || 1, x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 };
 }
+
+/* lay one band of light across the gap between the two fingertips. as the hand
+   sweeps, successive bands fill in a wide, shimmering aurora curtain. the gap
+   sets the width; the colour is an aurora spectrum (gold under the golden pen,
+   a full rainbow under the rainbow pen). */
+function ribbonBand(a, b, ti) {
+  const t = now();
+  const wa = screenToWorld(a.clientX, a.clientY);
+  const wb = screenToWorld(b.clientX, b.clientY);
+  const widthFrac = Math.min(1, ti.dist / Math.min(W, H));
+  auroraFlash = Math.max(auroraFlash, 0.2 + widthFrac * 0.7);
+  // space bands out by travel (like the pen lays beads): a slow hand would otherwise
+  // restack bright sparkles on one spot every frame and blow the colour out to white.
+  const step = ribbonLast ? Math.hypot(ti.x - ribbonLast.x, ti.y - ribbonLast.y) : 999;
+  if (step < 8) return;    // space bands by travel so a slow hand doesn't restack on one spot
+  ribbonLast = { x: ti.x, y: ti.y };
+  ribbonPhase += step * 0.4;                             // the spectrum drifts slowly as you sweep
+  const drift = t * 28;                                  // the curtain's colours slowly shimmer
+  // rainbow mode spans the full spectrum ACROSS the gap, so every band is a whole
+  // rainbow at once (a rainbow paintbrush); vivid sprites keep the colour from washing white.
+  let hue0, hueSpan, sat;
+  if (goldenMode)       { hue0 = 36;                hueSpan = 26;  sat = 92; }
+  else if (rainbowMode) { hue0 = ribbonPhase;       hueSpan = 330; sat = 95; }
+  else                  { hue0 = 120 + drift * 0.4; hueSpan = 190; sat = 86; }  // green → violet aurora
+  const n = Math.max(3, Math.min(12, Math.round(ti.dist / 34)));   // denser across the gap for a continuous rainbow
+  for (let i = 0; i < n; i++) {
+    const f = n > 1 ? i / (n - 1) : 0.5;
+    const px = wa.x + (wb.x - wa.x) * f + (Math.random() - 0.5) * 8;
+    const py = wa.y + (wb.y - wa.y) * f + (Math.random() - 0.5) * 8;
+    const hue = (hue0 + hueSpan * f) % 360 + (Math.random() - 0.5) * 8;
+    spawn(px, py, {
+      vx: (Math.random() - 0.5) * 14,
+      vy: -14 - Math.random() * 26,                      // curtains drift gently upward
+      hue, sat, size: 1.6 + Math.random() * 2.0, vivid: rainbowMode,
+      life: 0.7 + Math.random() * 0.8, glint: Math.random() < 0.3, grav: -8,
+    });
+  }
+  mood = Math.min(1, mood + 0.004);
+  pixie.joy = Math.min(1, pixie.joy + 0.02);
+  if (t - lastRibbonNote > 0.12) {
+    lastRibbonNote = t;
+    auroraChord(panOf((wa.x + wb.x) / 2), (wa.y + wb.y) / 2, 0.6 + widthFrac * 0.6);
+  }
+}
+
 window.addEventListener('touchstart', (e) => {
-  if (e.touches.length === 2) { wake(); pinch = touchInfo(e); }
-}, { passive: false });
-window.addEventListener('touchmove', (e) => {
-  if (e.touches.length === 2 && pinch) {
-    e.preventDefault();
-    const ti = touchInfo(e);
-    setZoom(cam.targetZoom * (ti.dist / pinch.dist), ti.x, ti.y);
-    pinch = ti;
+  if (e.touches.length === 2) {
+    wake();
+    stroke = null; pointer.active = false;     // abandon any one-finger stroke the first touch began
+    twoFinger = touchInfo(e); pinch = ribbon = null; ribbonLast = null; ribbonPhase = 0;
   }
 }, { passive: false });
-function endPinch(e) { if (!e.touches || e.touches.length < 2) pinch = null; }
+window.addEventListener('touchmove', (e) => {
+  if (e.touches.length !== 2) return;
+  e.preventDefault();
+  const ti = touchInfo(e);
+  // commit to a mode once the gesture has moved enough to read its intent
+  if (twoFinger && !pinch && !ribbon) {
+    const dSpread = Math.abs(ti.dist - twoFinger.dist);
+    const dPan = Math.hypot(ti.x - twoFinger.x, ti.y - twoFinger.y);
+    if (Math.max(dSpread, dPan) < 14) return;            // not enough yet — wait
+    if (dPan > dSpread * 1.15) ribbon = ti;              // sweeping → paint
+    else pinch = twoFinger;                              // spreading → zoom (replay from start)
+  }
+  if (pinch) {
+    setZoom(cam.targetZoom * (ti.dist / pinch.dist), ti.x, ti.y);
+    pinch = ti;
+  } else if (ribbon) {
+    ribbonBand(e.touches[0], e.touches[1], ti);
+    ribbon = ti;
+  }
+}, { passive: false });
+function endPinch(e) { if (!e.touches || e.touches.length < 2) pinch = ribbon = twoFinger = null; }
 window.addEventListener('touchend', endPinch);
 window.addEventListener('touchcancel', endPinch);
 
@@ -2136,7 +2230,7 @@ function render() {
   // ---- particles ----
   for (const p of parts) {
     const a = Math.max(0, p.life / p.max);
-    drawSparkle(p.x, p.y, p.size, p.hue, p.sat, a * 0.9, p.glint);
+    drawSparkle(p.x, p.y, p.size, p.hue, p.sat, a * 0.9, p.glint, p.vivid);
   }
 
   drawTreats();
