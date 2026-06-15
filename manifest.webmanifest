@@ -1,0 +1,14 @@
+{
+  "name": "Pixie",
+  "short_name": "Pixie",
+  "description": "A little sprite who only speaks in light and sound.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0a1f",
+  "theme_color": "#0a0a1f",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

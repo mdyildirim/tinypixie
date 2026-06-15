@@ -1,0 +1,2344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>Pixie</title>
+<meta name="theme-color" content="#0a0a1f" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Pixie" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" href="icon.svg" />
+<link rel="apple-touch-icon" href="icon.svg" />
+<style>
+  :root { color-scheme: dark; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; width: 100%;
+    overflow: hidden; background: #0a0a1f;
+    touch-action: none; overscroll-behavior: none;
+    cursor: none;
+  }
+  #stage { display: block; width: 100vw; height: 100vh; }
+
+  /* a wordless, breathing invitation that fades after the first touch */
+  #hint {
+    position: fixed; left: 50%; bottom: 7vh; transform: translateX(-50%);
+    display: flex; gap: 14px; align-items: center;
+    opacity: 0; transition: opacity 1.4s ease;
+    pointer-events: none;
+  }
+  #hint.show { opacity: 0.75; }
+  #hint .dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: #fff; box-shadow: 0 0 14px 3px rgba(180,210,255,.9);
+    animation: pulse 1.8s ease-in-out infinite;
+  }
+  #hint .dot:nth-child(2) { animation-delay: .3s; }
+  #hint .dot:nth-child(3) { animation-delay: .6s; }
+  @keyframes pulse {
+    0%, 100% { transform: scale(.7); opacity: .35; }
+    50%      { transform: scale(1.25); opacity: 1; }
+  }
+
+  /* tiny sound toggle, top-right — only symbol, no words */
+  #mute {
+    position: fixed; top: 16px; right: 16px; width: 40px; height: 40px;
+    border: none; border-radius: 50%; cursor: pointer;
+    background: rgba(255,255,255,.06);
+    backdrop-filter: blur(6px);
+    display: grid; place-items: center;
+    opacity: .5; transition: opacity .25s, background .25s;
+    z-index: 5;
+  }
+  #mute:hover { opacity: 1; background: rgba(255,255,255,.14); }
+  #mute svg { width: 20px; height: 20px; fill: #dfe7ff; }
+
+  /* rainbow pen toggle, tucked just under the sound button */
+  #rainbow {
+    position: fixed; top: 64px; right: 16px; width: 40px; height: 40px;
+    border: none; border-radius: 50%; cursor: pointer;
+    background: rgba(255,255,255,.06);
+    backdrop-filter: blur(6px);
+    display: grid; place-items: center;
+    opacity: .5; transition: opacity .25s, background .25s, box-shadow .25s;
+    z-index: 5;
+  }
+  #rainbow:hover { opacity: 1; background: rgba(255,255,255,.14); }
+  #rainbow svg { width: 22px; height: 22px; }
+  #rainbow.on {
+    opacity: 1;
+    background: rgba(255,255,255,.14);
+    box-shadow: 0 0 14px 2px rgba(255,255,255,.28);
+  }
+
+  /* golden rainbow — a rare pen, earned over time; hidden until she offers it */
+  #golden {
+    position: fixed; top: 112px; right: 16px; width: 40px; height: 40px;
+    border: none; border-radius: 50%; cursor: pointer;
+    background: rgba(255,255,255,.06);
+    backdrop-filter: blur(6px);
+    display: none; place-items: center;
+    opacity: .5; transition: opacity .25s, background .25s, box-shadow .25s;
+    z-index: 5;
+  }
+  #golden.shown { display: grid; }
+  #golden:hover { opacity: 1; background: rgba(255,255,255,.14); }
+  #golden svg { width: 22px; height: 22px; }
+  #golden.on {
+    opacity: 1;
+    background: rgba(255,210,120,.18);
+    box-shadow: 0 0 16px 3px rgba(255,196,84,.45);
+  }
+  /* a one-time shimmer the first time she earns it */
+  #golden.reveal { animation: goldenReveal 2.8s ease-out 1; }
+  @keyframes goldenReveal {
+    0%   { opacity: 0; transform: scale(.4); box-shadow: 0 0 0 0 rgba(255,196,84,0); }
+    25%  { opacity: 1; transform: scale(1.25); box-shadow: 0 0 26px 8px rgba(255,210,120,.85); }
+    60%  { transform: scale(1); box-shadow: 0 0 18px 4px rgba(255,196,84,.5); }
+    100% { box-shadow: 0 0 0 0 rgba(255,196,84,0); opacity: .55; }
+  }
+</style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+
+  <div id="hint"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+
+  <button id="mute" aria-label="sound on/off" title="sound">
+    <svg id="sndIcon" viewBox="0 0 24 24"><path d="M4 9v6h4l5 5V4L8 9H4zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4zM14 2.5v2.1a7 7 0 0 1 0 13.8v2.1A9 9 0 0 0 14 2.5z"/></svg>
+  </button>
+
+  <button id="rainbow" aria-label="rainbow pen on/off" title="rainbow">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round">
+      <path d="M3 19 A9 9 0 0 1 21 19" stroke="#ff5d6c"/>
+      <path d="M6.4 19 A5.6 5.6 0 0 1 17.6 19" stroke="#ffcf4d"/>
+      <path d="M9.8 19 A2.2 2.2 0 0 1 14.2 19" stroke="#4db8ff"/>
+    </svg>
+  </button>
+
+  <button id="golden" aria-label="golden rainbow pen on/off" title="golden rainbow">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round">
+      <path d="M3 19 A9 9 0 0 1 21 19" stroke="#ffd86b"/>
+      <path d="M6.4 19 A5.6 5.6 0 0 1 17.6 19" stroke="#ffb347"/>
+      <path d="M9.8 19 A2.2 2.2 0 0 1 14.2 19" stroke="#ff9e3d"/>
+      <circle cx="12" cy="5.4" r="1.5" fill="#fff3c4"/>
+    </svg>
+  </button>
+
+<script>
+/* ============================================================
+   PIXIE  —  a little sprite who only speaks in sound.
+   Everything lives in one file. No words, just light & chimes.
+   ============================================================ */
+
+/* ---------- Persistence & bond (she remembers you) -------- */
+const STORE_KEY = 'pixie.save.v1';
+const save = { bond: 0, hue: 300, lastVisit: 0, lastGiftDay: '', plays: 0, stars: [] };
+try { Object.assign(save, JSON.parse(localStorage.getItem(STORE_KEY) || '{}')); } catch (e) {}
+
+const awayMs = save.lastVisit ? Math.max(0, Date.now() - save.lastVisit) : 0;
+const todayStr = new Date().toISOString().slice(0, 10);
+let giftPending = save.lastGiftDay !== todayStr;     // a once-a-day little surprise
+// how warmly she greets you, scaled by how long you were gone
+let welcomeBack = awayMs > 6 * 3600e3 ? 1 : awayMs > 30 * 60e3 ? 0.7 : awayMs > 3 * 60e3 ? 0.4 : 0;
+
+// bond unlocks her growth: brighter glow, an extra wing pair, then a tiny crown.
+// thresholds are tuned so growth shows over several real play sessions, not minutes
+function bondTier() { const b = save.bond; return b > 600 ? 3 : b > 220 ? 2 : b > 60 ? 1 : 0; }
+
+let lastPersist = 0;
+function persist() {
+  save.lastVisit = Date.now();
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(save)); } catch (e) {}
+}
+save.plays = (save.plays || 0) + 1; persist();        // record this visit right away
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) persist();
+  else if (started) resumeAudio();   // back in the foreground: revive sound iOS interrupted
+});
+window.addEventListener('pagehide', persist);
+// bfcache restore (common on iOS when returning to a backgrounded tab) also needs a nudge
+window.addEventListener('pageshow', () => { if (started) resumeAudio(); });
+
+/* ---------- Audio engine ---------------------------------- */
+let ctx, master, reverb, muted = false;
+
+function ensureAudio() {
+  if (ctx && ctx.state !== 'closed') return;
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+  // iOS Safari "interrupts" audio on screen-lock, app-switch, Control Center, an
+  // incoming call/notification, or a long background — leaving the context in a
+  // non-standard 'interrupted' state. It never auto-resumes, so without this the
+  // toy goes silent until the browser is fully quit and reopened. Nudge it back.
+  ctx.onstatechange = () => {
+    if (ctx && (ctx.state === 'interrupted' || ctx.state === 'suspended')) ctx.resume().catch(() => {});
+  };
+
+  master = ctx.createGain();
+  master.gain.value = muted ? 0 : 0.85;
+
+  // a gentle limiter so dense, overlapping voices (e.g. fast tickling) can never
+  // sum past full-scale and clip into a harsh buzz. Quiet single notes sit well
+  // below the threshold and pass through untouched; only loud pile-ups get reined in.
+  const limiter = ctx.createDynamicsCompressor();
+  limiter.threshold.value = -4;
+  limiter.knee.value = 4;
+  limiter.ratio.value = 12;
+  limiter.attack.value = 0.003;
+  limiter.release.value = 0.2;
+  master.connect(limiter);
+  limiter.connect(ctx.destination);
+
+  // lush hall reverb from a generated impulse. Kept modest: its multi-second tail
+  // is the one thing with "memory", so a hot send is what builds into a droning
+  // wash when notes retrigger faster than the tail decays.
+  reverb = ctx.createConvolver();
+  reverb.buffer = makeImpulse(2.8, 2.4);
+  const revGain = ctx.createGain();
+  revGain.gain.value = 0.55;
+  reverb.connect(revGain).connect(master);
+}
+
+// Always nudge the context back to 'running'. Covers both the standard 'suspended'
+// state and Safari's 'interrupted' state, and rebuilds from scratch if the context
+// ever ends up 'closed'. Safe to call from any gesture or on returning to the tab.
+function resumeAudio() {
+  ensureAudio();
+  if (ctx && ctx.state !== 'running') ctx.resume().catch(() => {});
+}
+
+function makeImpulse(seconds, decay) {
+  const rate = ctx.sampleRate, len = Math.floor(rate * seconds);
+  const buf = ctx.createBuffer(2, len, rate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+  }
+  return buf;
+}
+
+const midiToFreq = m => 440 * Math.pow(2, (m - 69) / 12);
+
+/* a single soft synth voice with envelope, pan and reverb send */
+function voice(note, time, dur, opts = {}) {
+  if (!ctx) return;
+  const { wave = 'sine', vol = 0.1, attack = 0.008, hold = 0, send = 0.3, pan = 0, detune = 0 } = opts;
+  const v = Math.max(0.0006, vol);
+  const osc = ctx.createOscillator();
+  osc.type = wave;
+  osc.frequency.value = midiToFreq(note);
+  osc.detune.value = detune;
+
+  const g = ctx.createGain();
+  const end = time + attack + hold + dur;
+  g.gain.setValueAtTime(0.0001, time);
+  g.gain.linearRampToValueAtTime(v, time + attack);
+  g.gain.setValueAtTime(v, time + attack + hold);
+  g.gain.exponentialRampToValueAtTime(0.0001, end);
+
+  let node = g;
+  if (ctx.createStereoPanner) {
+    const p = ctx.createStereoPanner();
+    p.pan.value = Math.max(-1, Math.min(1, pan));
+    g.connect(p); node = p;
+  }
+  node.connect(master);
+  const s = ctx.createGain(); s.gain.value = send; node.connect(s); s.connect(reverb);
+
+  osc.connect(g);
+  osc.start(time);
+  osc.stop(end + 0.06);
+}
+
+/* struck bell: fundamental + inharmonic partials, quick bloom & long tail */
+function bell(note, time, vol = 0.05, dur = 2.4) {
+  if (!ctx) return;
+  const freq = midiToFreq(note);
+  const partials = [[1, 1], [2.0, 0.55], [2.76, 0.32], [5.4, 0.16]];
+  partials.forEach(([mult, amp]) => {
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.value = freq * mult;
+    const g = ctx.createGain();
+    const tail = dur * (0.55 + 0.45 * Math.random());
+    g.gain.setValueAtTime(0.0001, time);
+    g.gain.linearRampToValueAtTime(vol * amp, time + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + tail);
+    o.connect(g);
+    g.connect(master);
+    const s = ctx.createGain(); s.gain.value = 0.4; g.connect(s); s.connect(reverb);
+    o.start(time);
+    o.stop(time + tail + 0.1);
+  });
+}
+
+/* ---------- The four signature "songs" -------------------- */
+function playGolden(kind) {
+  resumeAudio();
+  const t = ctx.currentTime + 0.04;
+
+  if (kind === 'pixie') {
+    bell(72, t, 0.045);
+    bell(79, t + 0.015, 0.035);
+    const top = [84, 86, 88, 91, 93, 96, 98, 100];
+    for (let i = 0; i < 11; i++) {
+      const base = top[Math.min(i, top.length - 1)];
+      const note = base + (Math.random() < 0.3 ? 12 : 0);
+      const at = t + 0.04 + i * 0.045 + Math.random() * 0.02;
+      const pan = -0.4 + Math.random() * 0.8;
+      voice(note, at, 0.16, { wave: 'sine', vol: 0.06 - i * 0.002, send: 0.32, pan });
+    }
+    for (let i = 0; i < 4; i++) {
+      const note = top[4 + Math.floor(Math.random() * 4)] + (Math.random() < 0.5 ? 12 : 0);
+      voice(note, t + 0.45 + Math.random() * 0.35, 0.2, { wave: 'sine', vol: 0.03, send: 0.4, pan: -0.5 + Math.random() });
+    }
+    return 0.85;
+  }
+
+  if (kind === 'harp') {
+    const run = [60, 62, 64, 67, 69, 72, 74, 76, 79, 81, 84, 88];
+    run.forEach((n, i) => {
+      const pan = -0.3 + (i / (run.length - 1)) * 0.6;
+      voice(n, t + i * 0.028, 0.5, { wave: 'triangle', vol: 0.042, attack: 0.014, send: 0.42, pan, detune: 4 });
+    });
+    const cap = t + run.length * 0.028;
+    bell(88, cap, 0.03);
+    bell(91, cap + 0.04, 0.024);
+    voice(96, cap + 0.1, 0.55, { wave: 'sine', vol: 0.026, send: 0.45 });
+    return 0.7;
+  }
+
+  if (kind === 'crystal') {
+    [72, 76, 79, 84].forEach((n, i) => bell(n, t + i * 0.07, 0.05));
+    voice(91, t + 0.32, 0.7, { wave: 'sine', vol: 0.04, send: 0.4 });
+    voice(96, t + 0.42, 0.7, { wave: 'sine', vol: 0.035, send: 0.45 });
+    [60, 64, 67].forEach(n => voice(n, t, 1.6, { wave: 'sine', vol: 0.022, attack: 0.4, send: 0.3, detune: 5 }));
+    return 0.85;
+  }
+
+  /* aurora */
+  [60, 64, 67, 72].forEach((n, i) =>
+    voice(n, t, 1.5, { wave: 'sine', vol: 0.05, attack: 0.5, hold: 0.1, send: 0.35, detune: 5, pan: -0.2 + i * 0.13 }));
+  bell(84, t + 0.5, 0.05);
+  [98, 96, 93, 91].forEach((n, i) =>
+    voice(n, t + 0.62 + i * 0.11, 0.55, { wave: 'sine', vol: 0.034, send: 0.4, pan: 0.3 - i * 0.15 }));
+  return 1.5;
+}
+
+/* a light, throttled twinkle for when the pixie is drifting near your hand */
+const PENTA = [84, 86, 88, 91, 93, 96, 98];
+function twinkle(pan = 0, bright = 1) {
+  resumeAudio();
+  const t = ctx.currentTime + 0.02;
+  const n = PENTA[Math.floor(Math.random() * PENTA.length)] + (Math.random() < 0.25 ? 12 : 0);
+  voice(n, t, 0.22, { wave: 'sine', vol: 0.03 * bright, send: 0.42, pan });
+  if (Math.random() < 0.4) voice(n + 7, t + 0.05, 0.2, { wave: 'sine', vol: 0.02 * bright, send: 0.45, pan: pan * -0.6 });
+}
+
+/* a soft bouncy "hi-hi-hi" burst for tickling — clean plucked notes, NO pitch sweeps */
+function giggle(pan = 0) {
+  resumeAudio();
+  const t0 = ctx.currentTime + 0.01;
+  const penta = [84, 86, 88, 91, 93];            // C6 D6 E6 G6 A6
+  const n = 3 + (Math.random() < 0.5 ? 1 : 0);   // a little "hi-hi-hi(-hi)" cascade
+  let idx = 2 + Math.floor(Math.random() * 2);
+  for (let i = 0; i < n; i++) {
+    idx += (i % 2 === 0 ? -1 : 1);               // bounce down–up–down
+    idx = Math.max(0, Math.min(penta.length - 1, idx));
+    const note = penta[idx];
+    const at = t0 + i * (0.085 + Math.random() * 0.02);
+    const p = pan + (Math.random() - 0.5) * 0.3;
+    voice(note, at, 0.13, { wave: 'sine', vol: 0.03, attack: 0.006, send: 0.4, pan: p });
+    voice(note + 12, at, 0.07, { wave: 'sine', vol: 0.011, attack: 0.004, send: 0.5, pan: p });  // soft sparkle
+  }
+}
+
+/* a single pen note whose pitch comes from how high on screen you drew */
+function noteFromY(wy) {
+  const top = cam.y - (H / 2) / cam.zoom;
+  const ny = 1 - Math.max(0, Math.min(1, (wy - top) / (H / cam.zoom)));
+  // bright C-major pentatonic — every pair sounds sweet, no dark low notes
+  const scale = [72, 74, 76, 79, 81, 84, 86, 88, 91, 93, 96, 98, 100];
+  return scale[Math.round(ny * (scale.length - 1))];
+}
+function penNote(wy, pan = 0, vol = 0.03) {
+  resumeAudio();
+  const n = noteFromY(wy);
+  const t = ctx.currentTime + 0.012;
+  if (Math.random() < 0.5) {
+    // glassy music-box ping: short triangle body + soft octave sparkle
+    voice(n, t, 0.18, { wave: 'triangle', vol: vol * 0.9, attack: 0.004, send: 0.4, pan });
+    voice(n + 12, t, 0.13, { wave: 'sine', vol: vol * 0.45, attack: 0.004, send: 0.5, pan });
+  } else {
+    // soft sine bloom (the original, gentler voice)
+    voice(n, t, 0.28, { wave: 'sine', vol: vol * 0.95, attack: 0.01, send: 0.45, pan });
+  }
+}
+
+/* rainbow pen: hue from how high on screen you drew (red low → violet high) */
+function hueFromY(wy) {
+  const top = cam.y - (H / 2) / cam.zoom;
+  const ny = 1 - Math.max(0, Math.min(1, (wy - top) / (H / cam.zoom)));
+  return ny * 330;
+}
+/* a shimmering celesta-bell pen voice for rainbow mode — warm chorus + a rising sparkle of light */
+function rainbowNote(wy, pan = 0, vol = 0.03) {
+  resumeAudio();
+  const top = cam.y - (H / 2) / cam.zoom;
+  const ny = 1 - Math.max(0, Math.min(1, (wy - top) / (H / cam.zoom)));
+  const scale = [76, 79, 81, 84, 86, 88, 91, 93, 96, 98, 100, 103];   // bright major pentatonic — always sweet
+  const n = scale[Math.round(ny * (scale.length - 1))];
+  const t = ctx.currentTime + 0.012;
+  // glassy bell body, gently chorused (two slightly detuned voices) for a warm shimmer
+  voice(n, t, 0.5, { wave: 'triangle', vol: vol * 0.6, attack: 0.003, send: 0.62, pan, detune: -7 });
+  voice(n, t, 0.5, { wave: 'triangle', vol: vol * 0.5, attack: 0.003, send: 0.62, pan, detune: 7 });
+  voice(n + 12, t, 0.32, { wave: 'sine', vol: vol * 0.38, attack: 0.003, send: 0.72, pan });           // bright octave
+  // a quick little rising twinkle — the "rainbow" sparkle of light
+  if (Math.random() < 0.6) {
+    const up = n + (Math.random() < 0.5 ? 12 : 16);
+    voice(up, t + 0.05, 0.28, { wave: 'sine', vol: vol * 0.18, attack: 0.004, send: 0.78, pan: pan * 0.4 });
+  }
+  // faint high glitter dust
+  if (Math.random() < 0.4 && n + 24 <= 112)
+    voice(n + 24, t + 0.02, 0.12, { wave: 'sine', vol: vol * 0.09, attack: 0.003, send: 0.72, pan });
+}
+/* a magical rising glissando when you switch the rainbow pen on — like a rainbow blooming open */
+function rainbowOnChime() {
+  resumeAudio();
+  const t = ctx.currentTime + 0.02;
+  [76, 81, 84, 88, 91, 96, 100, 103].forEach((n, i) =>
+    voice(n, t + i * 0.05, 0.45, { wave: 'triangle', vol: 0.024, attack: 0.003, send: 0.66, pan: -0.4 + i * 0.11, detune: i % 2 ? 6 : -6 }));
+  voice(108, t + 0.46, 0.7, { wave: 'sine', vol: 0.02, attack: 0.004, send: 0.8 });   // shimmer to finish
+}
+
+/* the golden rainbow's pen voice — a warm struck bell with an added fifth + octave
+   and a long, glowing reverb tail. richer and rarer than the everyday rainbow. */
+function goldenNote(wy, pan = 0, vol = 0.03) {
+  resumeAudio();
+  const top = cam.y - (H / 2) / cam.zoom;
+  const ny = 1 - Math.max(0, Math.min(1, (wy - top) / (H / cam.zoom)));
+  const scale = [72, 76, 79, 83, 84, 88, 91, 95, 96, 100, 103, 108];   // warm lydian-tinged major
+  const n = scale[Math.round(ny * (scale.length - 1))];
+  const t = ctx.currentTime + 0.012;
+  bell(n, t, vol * 0.7, 2.2);                                                                    // golden bell body
+  voice(n, t, 0.6, { wave: 'triangle', vol: vol * 0.4, attack: 0.004, send: 0.72, pan, detune: -8 });  // chorus
+  voice(n, t, 0.6, { wave: 'triangle', vol: vol * 0.34, attack: 0.004, send: 0.72, pan, detune: 8 });
+  voice(n + 7, t + 0.02, 0.45, { wave: 'sine', vol: vol * 0.22, attack: 0.004, send: 0.8, pan: pan * 0.5 });  // soft fifth
+  voice(n + 12, t, 0.4, { wave: 'sine', vol: vol * 0.3, attack: 0.003, send: 0.82, pan });                    // bright octave
+  if (Math.random() < 0.55) {
+    const up = n + (Math.random() < 0.5 ? 19 : 24);
+    if (up <= 116) voice(up, t + 0.06, 0.34, { wave: 'sine', vol: vol * 0.13, attack: 0.004, send: 0.86, pan: pan * 0.3 });
+  }
+}
+
+/* a tiny soft "a-choo" — a little squeak wind-up, then a downward pop */
+function sneezeChime(pan = 0) {
+  resumeAudio();
+  const t = ctx.currentTime + 0.02;
+  voice(96, t, 0.08, { wave: 'sine', vol: 0.02, attack: 0.005, send: 0.3, pan });            // hh-
+  voice(84, t + 0.12, 0.22, { wave: 'triangle', vol: 0.03, attack: 0.004, send: 0.45, pan }); // -choo
+  voice(72, t + 0.14, 0.26, { wave: 'sine', vol: 0.016, attack: 0.004, send: 0.4, pan });
+}
+
+/* soft "hmm?" when she's curious about your cursor */
+function curiousChime(pan = 0) {
+  resumeAudio();
+  const t = ctx.currentTime + 0.02;
+  voice(88, t, 0.18, { wave: 'sine', vol: 0.03, send: 0.4, pan });
+  voice(93, t + 0.12, 0.22, { wave: 'sine', vol: 0.028, send: 0.42, pan: pan * -0.5 });
+}
+
+/* gentle rising stretch when she wakes / yawns */
+function yawnChime() {
+  resumeAudio();
+  const t = ctx.currentTime + 0.02;
+  [60, 64, 67, 72].forEach((n, i) =>
+    voice(n, t + i * 0.09, 0.5, { wave: 'sine', vol: 0.038, attack: 0.06, send: 0.42, detune: 4 }));
+}
+
+/* slow breathing lullaby drone while she sleeps */
+function sleepBreath() {
+  resumeAudio();
+  const t = ctx.currentTime + 0.02;
+  [48, 55, 60].forEach((n, i) =>
+    voice(n, t, 2.4, { wave: 'sine', vol: 0.024, attack: 0.7, hold: 0.2, send: 0.45, detune: 5, pan: (i - 1) * 0.25 }));
+  if (Math.random() < 0.5) voice(96 + (Math.random() < 0.5 ? 0 : 5), t + 0.5, 0.7, { wave: 'sine', vol: 0.016, send: 0.5, pan: (Math.random() - 0.5) });
+}
+
+/* a soft content "mmm" sigh while she's being petted — gentle swells, no drone or tremolo */
+function purrSigh(pan = 0, intensity = 1) {
+  resumeAudio();
+  const t = ctx.currentTime + 0.02;
+  [57, 64].forEach((n, i) =>                                    // warm A3 + E4, slow swell
+    voice(n, t, 0.9, { wave: 'sine', vol: 0.028 * intensity, attack: 0.24, hold: 0.08, send: 0.4, detune: 4, pan: pan + (i - 0.5) * 0.2 }));
+  if (Math.random() < 0.5) voice(88, t + 0.12, 0.6, { wave: 'sine', vol: 0.012 * intensity, attack: 0.12, send: 0.5, pan });
+}
+
+/* ---------- Extra voices for the new delights ------------- */
+/* a warm "oh — you're back!" that blooms bigger the longer you were away */
+function welcomeChime(mag = 1) {
+  resumeAudio();
+  const t = ctx.currentTime + 0.04;
+  [60, 64, 67, 72, 76].forEach((n, i) =>
+    voice(n, t + i * 0.08, 0.6, { wave: 'sine', vol: 0.03 + 0.02 * mag, attack: 0.02, send: 0.45, pan: -0.3 + i * 0.15 }));
+  bell(84, t + 0.1, 0.04 + 0.03 * mag);
+  if (mag > 0.6) { bell(91, t + 0.34, 0.035); voice(96, t + 0.5, 0.7, { wave: 'sine', vol: 0.03, send: 0.5 }); }
+}
+/* a soft "blup" + happy sparkle when she nibbles a treat */
+function feedChime(pan = 0) {
+  resumeAudio();
+  const t = ctx.currentTime + 0.02;
+  voice(72, t, 0.12, { wave: 'sine', vol: 0.035, attack: 0.004, send: 0.3, pan });
+  voice(67, t + 0.05, 0.18, { wave: 'sine', vol: 0.03, attack: 0.004, send: 0.35, pan });
+  voice(84, t + 0.13, 0.3, { wave: 'triangle', vol: 0.025, send: 0.45, pan });
+}
+/* shimmering chord for a drawn circle opening into a portal */
+function portalChime(pan = 0) {
+  resumeAudio();
+  const t = ctx.currentTime + 0.02;
+  [60, 67, 72, 79, 84, 91].forEach((n, i) =>
+    voice(n, t + i * 0.03, 0.8, { wave: 'sine', vol: 0.03, attack: 0.01, send: 0.5, pan: -0.4 + i * 0.16, detune: 4 }));
+  bell(96, t + 0.22, 0.05);
+}
+/* a sweet little love motif for a drawn heart */
+function heartChime(pan = 0) {
+  resumeAudio();
+  const t = ctx.currentTime + 0.02;
+  [72, 76, 79].forEach((n, i) =>
+    voice(n, t + i * 0.06, 0.5, { wave: 'triangle', vol: 0.034, attack: 0.01, send: 0.45, pan, detune: 5 }));
+  bell(88, t + 0.18, 0.04); bell(91, t + 0.26, 0.03);
+}
+/* a quick "wheee" rising run for a loop-the-loop */
+function loopChime(pan = 0) {
+  resumeAudio();
+  const t = ctx.currentTime + 0.01;
+  [72, 76, 79, 84, 88, 91, 96].forEach((n, i) =>
+    voice(n, t + i * 0.04, 0.18, { wave: 'sine', vol: 0.03, attack: 0.004, send: 0.4, pan: pan + (i / 7 - 0.5) }));
+}
+/* a bright sparkle for catching a shooting star */
+function catchChime(pan = 0) {
+  resumeAudio();
+  const t = ctx.currentTime + 0.02;
+  bell(96, t, 0.05); bell(103, t + 0.05, 0.035);
+  voice(91, t + 0.02, 0.4, { wave: 'sine', vol: 0.03, send: 0.5, pan });
+}
+/* a tiny "pop" for a bubble */
+function popChime(pan = 0) {
+  resumeAudio();
+  const t = ctx.currentTime + 0.01;
+  voice(96, t, 0.06, { wave: 'sine', vol: 0.03, attack: 0.003, send: 0.35, pan });
+  voice(84, t + 0.02, 0.1, { wave: 'sine', vol: 0.02, attack: 0.003, send: 0.4, pan });
+}
+/* a gentle duet when a friend comes to visit */
+function companionChime(pan = 0) {
+  resumeAudio();
+  const t = ctx.currentTime + 0.02;
+  [79, 84, 88].forEach((n, i) =>
+    voice(n, t + i * 0.07, 0.5, { wave: 'sine', vol: 0.028, send: 0.5, pan: pan + (i - 1) * 0.2 }));
+}
+
+/* ---------- Canvas / render setup ------------------------- */
+const canvas = document.getElementById('stage');
+const g = canvas.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = Math.floor(W * DPR);
+  canvas.height = Math.floor(H * DPR);
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  buildStars();
+}
+window.addEventListener('resize', resize);
+
+/* ---------- Camera (zoom) --------------------------------- */
+const cam = { zoom: 1, targetZoom: 1, x: 0, y: 0, focal: { x: 0, y: 0 } };
+function screenToWorld(sx, sy) {
+  return { x: (sx - W / 2) / cam.zoom + cam.x, y: (sy - H / 2) / cam.zoom + cam.y };
+}
+function setZoom(target, fx, fy) {
+  cam.targetZoom = Math.max(0.4, Math.min(3.2, target));
+  cam.focal.x = fx; cam.focal.y = fy;
+}
+
+/* twinkly far-off stars */
+let stars = [];
+function buildStars() {
+  const count = Math.round((W * H) / 9000);
+  stars = [];
+  for (let i = 0; i < count; i++) {
+    stars.push({
+      x: Math.random() * W, y: Math.random() * H * 0.92,
+      r: Math.random() * 1.4 + 0.3,
+      ph: Math.random() * Math.PI * 2,
+      sp: 0.4 + Math.random() * 1.2,
+    });
+  }
+}
+
+/* slow aurora blobs drifting behind everything */
+const blobs = [
+  { hue: 280, ax: 0.00021, ay: 0.00015, px: 0, py: 1.7, r: 0.55 },
+  { hue: 195, ax: 0.00017, ay: 0.00024, px: 2.1, py: 0.5, r: 0.6 },
+  { hue: 330, ax: 0.00013, ay: 0.00019, px: 4.0, py: 3.1, r: 0.5 },
+];
+
+/* ---------- Particles ------------------------------------- */
+const MAX = 520;
+const parts = [];
+let pIns = 0;                                // round-robin recycle cursor when at MAX
+function spawn(x, y, opts = {}) {
+  const {
+    vx = (Math.random() - 0.5) * 40,
+    vy = (Math.random() - 0.5) * 40,
+    life = 0.8 + Math.random() * 0.8,
+    size = 1.6 + Math.random() * 2.4,
+    hue = 50,
+    sat = 30,
+    glint = false,
+    drag = 0.92,
+    grav = -6,
+  } = opts;
+  const p = { x, y, vx, vy, life, max: life, size, hue, sat, glint, drag, grav };
+  // O(1) eviction: overwrite an old particle instead of the O(n) Array.shift().
+  // Additive ('lighter') blending is order-independent, so order needn't be preserved.
+  if (parts.length < MAX) parts.push(p);
+  else { parts[pIns % parts.length] = p; pIns++; }
+}
+
+function burst(x, y, n, opts = {}) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = (opts.speed || 70) * (0.3 + Math.random() * 0.7);
+    spawn(x, y, {
+      vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+      hue: (opts.hue == null ? Math.random() * 360 : opts.hue + (Math.random() - 0.5) * 50),
+      sat: opts.sat == null ? 75 : opts.sat,
+      size: 1.8 + Math.random() * 3,
+      life: 0.7 + Math.random() * 0.9,
+      glint: Math.random() < 0.4,
+      grav: opts.grav == null ? -10 : opts.grav,
+    });
+  }
+}
+
+function ring(x, y, n, radius, opts = {}) {
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const sp = (opts.speed || 120) * (0.85 + Math.random() * 0.3);
+    spawn(x, y, {
+      vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+      hue: opts.hue == null ? (i / n) * 360 : opts.hue + (Math.random() - 0.5) * 40,
+      sat: 70, size: 2 + Math.random() * 2.5,
+      life: 0.9 + Math.random() * 0.7, glint: true, grav: 0,
+    });
+  }
+}
+
+// Pre-baked sparkle sprites. The glow used to be a fresh radial gradient per
+// particle per frame — hundreds of CanvasGradient + hsla() allocations every
+// frame, which fed the GC and caused the periodic micro-freezes. We bake the
+// exact same gradient once per (hue, sat) bucket into a small canvas, then the
+// hot path is just a GPU drawImage with zero allocation.
+const SPR_PX = 64, SPR_R = 32, HUE_STEPS = 36, SPR_SATS = [40, 62, 82];
+const sparkCache = [];
+function makeSpark(hue, sat) {
+  const c = document.createElement('canvas'); c.width = c.height = SPR_PX;
+  const sg = c.getContext('2d');
+  const grd = sg.createRadialGradient(SPR_R, SPR_R, 0, SPR_R, SPR_R, SPR_R);
+  grd.addColorStop(0, `hsla(${hue}, ${sat}%, 96%, 1)`);
+  grd.addColorStop(0.4, `hsla(${hue}, ${sat}%, 78%, 0.55)`);
+  grd.addColorStop(1, `hsla(${hue}, ${sat}%, 60%, 0)`);
+  sg.fillStyle = grd; sg.fillRect(0, 0, SPR_PX, SPR_PX);
+  return c;
+}
+function sparkSprite(hue, sat) {
+  const hi = Math.round((((hue % 360) + 360) % 360) / (360 / HUE_STEPS)) % HUE_STEPS;
+  const si = sat < 51 ? 0 : sat < 71 ? 1 : 2;
+  const idx = hi * 3 + si;
+  return sparkCache[idx] || (sparkCache[idx] = makeSpark(hi * (360 / HUE_STEPS), SPR_SATS[si]));
+}
+function drawSparkle(x, y, size, hue, sat, alpha, glint) {
+  if (alpha <= 0) return;
+  g.globalCompositeOperation = 'lighter';
+  const rr = size * 3;
+  g.globalAlpha = alpha < 1 ? alpha : 1;       // sprite bakes the falloff; globalAlpha scales it
+  g.drawImage(sparkSprite(hue, sat), x - rr, y - rr, rr * 2, rr * 2);
+  g.globalAlpha = 1;
+
+  if (glint) {
+    g.strokeStyle = `hsla(${hue}, ${sat}%, 98%, ${alpha})`;
+    g.lineWidth = 1; const r = size * 3.4;
+    g.beginPath();
+    g.moveTo(x - r, y); g.lineTo(x + r, y);
+    g.moveTo(x, y - r); g.lineTo(x, y + r);
+    g.stroke();
+  }
+}
+
+/* ---------- Cached soft-glow sprites ----------------------
+   Same lesson as the particle sprites above: re-creating a CanvasGradient (plus
+   parsing its colour-stop strings) every frame for the fireflies, aurora, sky
+   and cursor glow was the bulk of the per-frame allocation that fed the GC into
+   periodic frame-long freezes. Bake each soft falloff once at peak alpha; the
+   hot path becomes a zero-allocation drawImage whose overall alpha we scale. */
+function bakeRadial(px, stops) {
+  const c = document.createElement('canvas'); c.width = c.height = px;
+  const cg = c.getContext('2d'); const r = px / 2;
+  const grd = cg.createRadialGradient(r, r, 0, r, r, r);
+  for (const [o, col] of stops) grd.addColorStop(o, col);
+  cg.fillStyle = grd; cg.fillRect(0, 0, px, px);
+  return c;
+}
+let _fireflySpr = null;
+const fireflySprite = () => _fireflySpr || (_fireflySpr = bakeRadial(64, [[0, 'hsla(75,90%,70%,1)'], [1, 'hsla(75,90%,70%,0)']]));
+let _glowSpr = null;
+const glowSprite = () => _glowSpr || (_glowSpr = bakeRadial(64, [[0, 'rgba(200,225,255,1)'], [1, 'rgba(200,225,255,0)']]));
+function blobSprite(b) {
+  return b._spr || (b._spr = bakeRadial(256, [[0, `hsla(${b.hue},80%,60%,1)`], [1, `hsla(${b.hue},80%,60%,0)`]]));
+}
+// sky gradient: only rebuilt when the (integer-rounded) colours or height change
+let _bgGrad = null, _bgKey = '';
+function skyGradient(sky) {
+  const top = rgb(sky.top), mid = rgb(sky.mid), bot = rgb(sky.bot);
+  const key = top + '|' + mid + '|' + bot + '|' + H;
+  if (key === _bgKey) return _bgGrad;
+  _bgKey = key;
+  _bgGrad = g.createLinearGradient(0, 0, 0, H);
+  _bgGrad.addColorStop(0, top); _bgGrad.addColorStop(0.55, mid); _bgGrad.addColorStop(1, bot);
+  return _bgGrad;
+}
+
+/* ============================================================
+   A LIVING WORLD — time of day, weather, rare visitors,
+   a sky you slowly fill, treats, and drawn-shape magic.
+   ============================================================ */
+
+/* ---------- The sky that follows the real clock ----------- */
+// rgb anchors around the 24h clock; we lerp between the two bracketing hours
+const SKY = [
+  { h: 0,  top: [10, 10, 34],   mid: [20, 16, 51],   bot: [40, 24, 66],    star: 1.0,  aur: 1.0 },
+  { h: 5,  top: [22, 18, 52],   mid: [60, 40, 84],   bot: [150, 86, 96],   star: 0.6,  aur: 0.85 },
+  { h: 8,  top: [70, 120, 180], mid: [130, 170, 212], bot: [200, 212, 232], star: 0.05, aur: 0.35 },
+  { h: 13, top: [86, 140, 200], mid: [140, 176, 216], bot: [196, 214, 236], star: 0.0,  aur: 0.28 },
+  { h: 18, top: [40, 30, 76],   mid: [120, 52, 92],   bot: [224, 108, 72],  star: 0.35, aur: 0.8 },
+  { h: 21, top: [16, 14, 46],   mid: [40, 26, 66],    bot: [70, 34, 80],    star: 0.85, aur: 1.0 },
+  { h: 24, top: [10, 10, 34],   mid: [20, 16, 51],    bot: [40, 24, 66],    star: 1.0,  aur: 1.0 },
+];
+const lerp = (a, b, t) => a + (b - a) * t;
+const lerp3 = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+const rgb = c => `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`;
+function skyNow() {
+  const d = new Date(), hr = d.getHours() + d.getMinutes() / 60;
+  let i = 0; while (i < SKY.length - 1 && SKY[i + 1].h <= hr) i++;
+  const a = SKY[i], b = SKY[Math.min(SKY.length - 1, i + 1)];
+  const t = b.h === a.h ? 0 : (hr - a.h) / (b.h - a.h);
+  return {
+    top: lerp3(a.top, b.top, t), mid: lerp3(a.mid, b.mid, t), bot: lerp3(a.bot, b.bot, t),
+    star: lerp(a.star, b.star, t), aur: lerp(a.aur, b.aur, t),
+  };
+}
+let curSky = skyNow();
+
+// the season (northern-hemisphere months) picks the gentle weather
+const SEASON = (() => {
+  const m = new Date().getMonth();
+  if (m === 11 || m <= 1) return 'snow';
+  if (m >= 2 && m <= 4) return 'petals';
+  if (m >= 5 && m <= 7) return 'fireflies';
+  return 'leaves';
+})();
+
+/* ---------- Drifting weather (a small, recycled set) ------ */
+const ambient = [];
+function newAmbient(anywhere) {
+  const fromTop = SEASON !== 'fireflies';
+  return {
+    x: Math.random() * W,
+    y: anywhere ? Math.random() * H : (fromTop ? -10 : H * (0.4 + Math.random() * 0.6)),
+    vx: (Math.random() - 0.5) * 14,
+    vy: SEASON === 'fireflies' ? (Math.random() - 0.5) * 8 : 12 + Math.random() * 26,
+    r: SEASON === 'snow' ? 1 + Math.random() * 2.2 : 1.5 + Math.random() * 2,
+    ph: Math.random() * Math.PI * 2, sp: 0.6 + Math.random() * 1.4, rot: Math.random() * Math.PI,
+  };
+}
+function seedAmbient() {
+  const target = SEASON === 'fireflies' ? 26 : 40;
+  while (ambient.length < target) ambient.push(newAmbient(true));
+}
+function updateAmbient(dt) {
+  if (!ambient.length) seedAmbient();
+  for (const a of ambient) {
+    a.ph += dt * a.sp;
+    if (SEASON === 'fireflies') {
+      a.x += (a.vx + Math.cos(a.ph) * 10 + tilt.x * 20) * dt;
+      a.y += (a.vy + Math.sin(a.ph * 0.7) * 8) * dt;
+    } else {
+      a.x += (a.vx + Math.sin(a.ph) * 12 + tilt.x * 28) * dt;
+      a.y += a.vy * dt; a.rot += dt * 0.6;
+    }
+    if (a.y > H + 12 || a.x < -16 || a.x > W + 16) Object.assign(a, newAmbient(false));
+  }
+}
+function drawAmbient(nightAmt) {
+  if (SEASON === 'fireflies') {
+    const vis = 0.25 + 0.75 * nightAmt;        // fireflies are shy in daylight
+    g.globalCompositeOperation = 'lighter';
+    const spr = fireflySprite();
+    for (const a of ambient) {
+      const blink = 0.2 + 0.8 * (0.5 + 0.5 * Math.sin(a.ph * 2));
+      g.globalAlpha = blink * vis;
+      g.drawImage(spr, a.x - 7, a.y - 7, 14, 14);
+    }
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+    return;
+  }
+  for (const a of ambient) {
+    if (SEASON === 'snow') {
+      g.fillStyle = `rgba(255,255,255,${0.5 + 0.3 * Math.sin(a.ph)})`;
+      g.beginPath(); g.arc(a.x, a.y, a.r, 0, Math.PI * 2); g.fill();
+    } else {
+      const hue = SEASON === 'petals' ? 330 : 28;
+      g.save(); g.translate(a.x, a.y); g.rotate(a.rot);
+      g.fillStyle = `hsla(${hue}, 70%, ${SEASON === 'petals' ? 80 : 60}%, 0.75)`;
+      g.beginPath(); g.ellipse(0, 0, a.r * 2.2, a.r, 0, 0, Math.PI * 2); g.fill();
+      g.restore();
+    }
+  }
+}
+
+/* ---------- Your growing constellation (kept forever) ----- */
+function addConstellationStar(wx, wy, hue) {
+  save.stars.push({ x: wx, y: wy, r: 1.4 + Math.random() * 1.8, hue: ((hue || 50) + 360) % 360, ph: Math.random() * 6.28 });
+  if (save.stars.length > 160) save.stars.shift();   // keep the sky from overcrowding
+  persist();
+}
+function drawConstellation(tNow) {
+  if (!save.stars.length) return;
+  g.globalCompositeOperation = 'lighter';
+  for (const s of save.stars) {
+    const tw = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(tNow * 1.3 + s.ph));
+    drawSparkle(s.x, s.y, s.r, s.hue, 70, tw * 0.7, false);
+  }
+  g.globalCompositeOperation = 'source-over';
+}
+
+/* ---------- Shooting stars (tap to catch) ----------------- */
+const shooters = [];
+let nextShooter = 6 + Math.random() * 10;
+function spawnShooter() {
+  const fromLeft = Math.random() < 0.5;
+  const ang = (fromLeft ? 0.5 : Math.PI - 0.5) + (Math.random() - 0.5) * 0.3;
+  const sp = 260 + Math.random() * 160;
+  shooters.push({ x: fromLeft ? -40 : W + 40, y: 40 + Math.random() * H * 0.4, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp * 0.6, life: 2.4, hue: 45 + Math.random() * 40 });
+}
+function updateShooters(dt) {
+  for (let i = shooters.length - 1; i >= 0; i--) {
+    const s = shooters[i];
+    s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt;
+    if (s.life <= 0 || s.x < -60 || s.x > W + 60) shooters.splice(i, 1);
+  }
+}
+function drawShooters() {
+  g.globalCompositeOperation = 'lighter';
+  for (const s of shooters) {
+    const grd = g.createLinearGradient(s.x, s.y, s.x - s.vx * 0.06, s.y - s.vy * 0.06);
+    grd.addColorStop(0, `hsla(${s.hue}, 90%, 92%, 0.9)`);
+    grd.addColorStop(1, `hsla(${s.hue}, 90%, 80%, 0)`);
+    g.strokeStyle = grd; g.lineWidth = 4; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(s.x, s.y); g.lineTo(s.x - s.vx * 0.06, s.y - s.vy * 0.06); g.stroke();
+    drawSparkle(s.x, s.y, 3.5, s.hue, 85, 1, true);
+  }
+  g.globalCompositeOperation = 'source-over';
+}
+
+/* ---------- Soap bubbles (tap to pop) --------------------- */
+const bubbles = [];
+let nextBubble = 8 + Math.random() * 12;
+function spawnBubble() {
+  bubbles.push({ x: 40 + Math.random() * (W - 80), y: H + 20, vx: (Math.random() - 0.5) * 14, vy: -(24 + Math.random() * 20), r: 14 + Math.random() * 16, ph: Math.random() * 6.28 });
+}
+function updateBubbles(dt) {
+  for (let i = bubbles.length - 1; i >= 0; i--) {
+    const b = bubbles[i];
+    b.ph += dt; b.x += (b.vx + Math.sin(b.ph) * 10 + tilt.x * 30) * dt; b.y += b.vy * dt;
+    if (b.y < -30) bubbles.splice(i, 1);
+  }
+}
+function drawBubbles() {
+  g.globalCompositeOperation = 'lighter';
+  for (const b of bubbles) {
+    const grd = g.createRadialGradient(b.x - b.r * 0.3, b.y - b.r * 0.3, 1, b.x, b.y, b.r);
+    grd.addColorStop(0, 'hsla(190, 80%, 95%, 0.25)');
+    grd.addColorStop(0.7, 'hsla(280, 80%, 85%, 0.10)');
+    grd.addColorStop(1, 'hsla(190, 80%, 80%, 0.02)');
+    g.fillStyle = grd; g.beginPath(); g.arc(b.x, b.y, b.r, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = 'hsla(200, 90%, 95%, 0.35)'; g.lineWidth = 1;
+    g.beginPath(); g.arc(b.x, b.y, b.r, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = 'hsla(0,0%,100%,0.5)';
+    g.beginPath(); g.arc(b.x - b.r * 0.35, b.y - b.r * 0.35, b.r * 0.12, 0, Math.PI * 2); g.fill();
+  }
+  g.globalCompositeOperation = 'source-over';
+}
+
+/* ---------- A friend who visits now and then -------------- */
+let companion = null;
+let nextVisit = 50 + Math.random() * 60;
+function spawnCompanion() {
+  const fromLeft = Math.random() < 0.5;
+  companion = {
+    x: fromLeft ? -40 : W + 40, y: H * (0.3 + Math.random() * 0.3), vx: 0, vy: 0,
+    hue: (save.hue + 120 + Math.random() * 120) % 360, flap: 0, t: 0, life: 14 + Math.random() * 8, leaving: false,
+  };
+  companionChime(panOf(companion.x));
+}
+function updateCompanion(dt) {
+  if (!companion) return;
+  const c = companion; c.t += dt; c.flap += dt * 12;
+  let hx, hy;
+  if (!c.leaving && c.t < c.life) {
+    const r = 80 + Math.sin(c.t * 0.8) * 20;          // orbit the pixie at a friendly distance
+    hx = pixie.x + Math.cos(c.t * 1.3) * r;
+    hy = pixie.y + Math.sin(c.t * 1.3) * r * 0.7;
+    if (Math.random() < dt * 0.6) { twinkle(panOf(c.x), 0.8); pixie.joy = Math.min(1, pixie.joy + 0.06); }
+  } else {
+    c.leaving = true; hx = c.x < W / 2 ? -80 : W + 80; hy = c.y - 60;
+  }
+  c.vx += (hx - c.x) * 6 * dt; c.vy += (hy - c.y) * 6 * dt;
+  c.vx -= c.vx * 4 * dt; c.vy -= c.vy * 4 * dt;
+  c.x += c.vx * dt; c.y += c.vy * dt;
+  if (Math.random() < dt * 8) spawn(c.x, c.y, { vx: 0, vy: -12, hue: c.hue, sat: 75, size: 1.4 + Math.random() * 1.6, life: 0.5 + Math.random() * 0.5, glint: Math.random() < 0.3, grav: -6 });
+  if (c.leaving && (c.x < -70 || c.x > W + 70)) companion = null;
+}
+function drawCompanion(tNow) {
+  if (!companion) return;
+  const c = companion, breathe = 1 + Math.sin(tNow * 3) * 0.06;
+  g.globalCompositeOperation = 'lighter';
+  const haloR = 30 * breathe;
+  const halo = g.createRadialGradient(c.x, c.y, 0, c.x, c.y, haloR);
+  halo.addColorStop(0, `hsla(${c.hue}, 90%, 82%, 0.5)`);
+  halo.addColorStop(1, `hsla(${c.hue}, 90%, 70%, 0)`);
+  g.fillStyle = halo; g.beginPath(); g.arc(c.x, c.y, haloR, 0, Math.PI * 2); g.fill();
+  for (const dir of [-1, 1]) {
+    g.save(); g.translate(c.x, c.y); g.rotate(dir * (0.5 + 0.2 * Math.sin(c.flap)));
+    const wg = g.createRadialGradient(4, 0, 1, 8, 0, 16);
+    wg.addColorStop(0, `hsla(${(c.hue + 60) % 360}, 100%, 90%, 0.4)`);
+    wg.addColorStop(1, `hsla(${(c.hue + 60) % 360}, 100%, 80%, 0)`);
+    g.fillStyle = wg; g.beginPath(); g.ellipse(8, 0, 11, 6, 0, 0, Math.PI * 2); g.fill();
+    g.restore();
+  }
+  g.globalCompositeOperation = 'source-over';
+  const r = 9 * breathe;
+  const body = g.createRadialGradient(c.x - 2, c.y - 2, 1, c.x, c.y, r);
+  body.addColorStop(0, 'rgba(255,255,255,1)');
+  body.addColorStop(0.5, `hsla(${c.hue}, 100%, 88%, 1)`);
+  body.addColorStop(1, `hsla(${c.hue}, 85%, 66%, 1)`);
+  g.fillStyle = body; g.beginPath(); g.arc(c.x, c.y, r, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#241433';
+  g.beginPath(); g.arc(c.x - 3, c.y - 1, 1.3, 0, Math.PI * 2); g.fill();
+  g.beginPath(); g.arc(c.x + 3, c.y - 1, 1.3, 0, Math.PI * 2); g.fill();
+}
+
+/* ---------- Treats you set out & hand-feed ---------------- */
+const treats = [];
+let draggingTreat = null;
+function spawnTreat(wx, wy) {
+  treats.push({ x: wx, y: wy, vx: 0, vy: 0, held: false, ph: Math.random() * 6.28, hue: 45 + Math.random() * 30 });
+  if (treats.length > 6) treats.shift();
+}
+function treatAt(wx, wy) {
+  for (let i = treats.length - 1; i >= 0; i--) {
+    const tr = treats[i];
+    if (Math.hypot(wx - tr.x, wy - tr.y) < 28) return tr;
+  }
+  return null;
+}
+function feedTreat(tr) {
+  const k = treats.indexOf(tr); if (k < 0) return;
+  treats.splice(k, 1);
+  pixie.squash = 0.5; pixie.joy = Math.min(1, pixie.joy + 0.6);
+  pixie.fed = Math.min(1.4, (pixie.fed || 0) + 0.5);
+  mood = Math.min(1, mood + 0.25); save.bond += 4;
+  burst(pixie.x, pixie.y, 16, { speed: 80, hue: tr.hue, sat: 80, grav: -10 });
+  feedChime(panOf(pixie.x));
+}
+function updateTreats(dt) {
+  for (const tr of treats) {
+    tr.ph += dt;
+    if (tr.held) continue;
+    tr.vy += -2 * dt; tr.vx *= Math.pow(0.9, dt * 60); tr.vy *= Math.pow(0.9, dt * 60);
+    tr.x += (tr.vx + tilt.x * 18) * dt; tr.y += (tr.vy + Math.sin(tr.ph * 1.5) * 6) * dt;
+    if (Math.random() < dt * 6) spawn(tr.x, tr.y, { vx: 0, vy: -8, hue: tr.hue, sat: 70, size: 1.2 + Math.random(), life: 0.5, grav: -4 });
+    if (Math.hypot(pixie.x - tr.x, pixie.y - tr.y) < 22) feedTreat(tr);
+  }
+}
+function drawTreats() {
+  for (const tr of treats) {
+    const pop = 1 + Math.sin(tr.ph * 2) * 0.12;
+    drawSparkle(tr.x, tr.y, 4.2 * pop, tr.hue, 80, 0.95, true);
+  }
+}
+
+/* ---------- Floating hearts (from a drawn heart) ---------- */
+const hearts = [];
+function spawnHeart(x, y, vx, vy) {
+  hearts.push({ x, y, vx, vy, life: 1.4, max: 1.4, size: 6 + Math.random() * 5, hue: 340 + Math.random() * 20 });
+}
+function updateHearts(dt) {
+  for (let i = hearts.length - 1; i >= 0; i--) {
+    const h = hearts[i]; h.life -= dt;
+    if (h.life <= 0) { hearts.splice(i, 1); continue; }
+    h.vy += -12 * dt; h.vx *= Math.pow(0.92, dt * 60);
+    h.x += h.vx * dt; h.y += h.vy * dt;
+  }
+}
+function drawHeartShape(x, y, s, hue, a) {
+  g.fillStyle = `hsla(${hue}, 85%, 72%, ${a})`;
+  g.beginPath();
+  g.moveTo(x, y + s * 0.3);
+  g.bezierCurveTo(x + s * 0.5, y - s * 0.4, x + s * 1.1, y + s * 0.25, x, y + s);
+  g.bezierCurveTo(x - s * 1.1, y + s * 0.25, x - s * 0.5, y - s * 0.4, x, y + s * 0.3);
+  g.fill();
+}
+function drawHearts() {
+  g.globalCompositeOperation = 'lighter';
+  for (const h of hearts) drawHeartShape(h.x, h.y, h.size, h.hue, Math.max(0, h.life / h.max));
+  g.globalCompositeOperation = 'source-over';
+}
+
+/* ---------- Floating stars (from a drawn star) ----------- */
+const floatingStars = [];
+function spawnFloatingStar(x, y, vx, vy, hue) {
+  floatingStars.push({
+    x, y, vx, vy, life: 1.5, max: 1.5,
+    size: 4 + Math.random() * 5,
+    hue: (((hue == null ? 50 : hue) + (Math.random() - 0.5) * 40) + 360) % 360,
+    rot: Math.random() * 6.28, spin: (Math.random() - 0.5) * 4,
+    tw: Math.random() * 6.28,                          // twinkle phase
+  });
+}
+function updateFloatingStars(dt) {
+  for (let i = floatingStars.length - 1; i >= 0; i--) {
+    const s = floatingStars[i]; s.life -= dt;
+    if (s.life <= 0) { floatingStars.splice(i, 1); continue; }
+    s.vy += -10 * dt;                                  // gentle lift, like the hearts
+    s.vx *= Math.pow(0.93, dt * 60);
+    s.x += s.vx * dt; s.y += s.vy * dt;
+    s.rot += s.spin * dt; s.tw += dt * 9;
+  }
+}
+/* a cute filled 5-point star with a bright core */
+function drawStarShape(x, y, s, hue, a, rot) {
+  g.save();
+  g.translate(x, y); g.rotate(rot || 0);
+  g.beginPath();
+  for (let i = 0; i < 5; i++) {
+    const oa = -Math.PI / 2 + i * (Math.PI * 2 / 5), ia = oa + Math.PI / 5;
+    const ox = Math.cos(oa) * s, oy = Math.sin(oa) * s;
+    if (i === 0) g.moveTo(ox, oy); else g.lineTo(ox, oy);
+    g.lineTo(Math.cos(ia) * s * 0.45, Math.sin(ia) * s * 0.45);
+  }
+  g.closePath();
+  g.fillStyle = `hsla(${hue}, 90%, 75%, ${a})`; g.fill();
+  g.beginPath(); g.arc(0, 0, s * 0.3, 0, 6.283);
+  g.fillStyle = `hsla(${hue}, 100%, 92%, ${a})`; g.fill();
+  g.restore();
+}
+function drawFloatingStars() {
+  g.globalCompositeOperation = 'lighter';
+  for (const s of floatingStars) {
+    const fade = Math.max(0, s.life / s.max);
+    const tw = 0.6 + 0.4 * Math.sin(s.tw);             // twinkle
+    drawStarShape(s.x, s.y, s.size, s.hue, fade * tw, s.rot);
+  }
+  g.globalCompositeOperation = 'source-over';
+}
+
+/* ---------- Rainbows (from a drawn arc) ------------------- */
+const rainbows = [];
+// the circle through three points — its centre is what the colour bands fan out from
+function circumcircle(a, b, c) {
+  const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
+  if (Math.abs(d) < 1e-4) return null;                      // ~collinear: no real circle
+  const a2 = a.x * a.x + a.y * a.y, b2 = b.x * b.x + b.y * b.y, c2 = c.x * c.x + c.y * c.y;
+  const ux = (a2 * (b.y - c.y) + b2 * (c.y - a.y) + c2 * (a.y - b.y)) / d;
+  const uy = (a2 * (c.x - b.x) + b2 * (a.x - c.x) + c2 * (b.x - a.x)) / d;
+  return { x: ux, y: uy };
+}
+function spawnRainbow(pts, golden) {
+  if (pts.length < 3) return;
+  const A = pts[0], B = pts[pts.length - 1];
+  let apex = pts[0]; for (const p of pts) if (p.y < apex.y) apex = p;
+  const chord = Math.hypot(B.x - A.x, B.y - A.y);
+  // the centre the bands radiate from: the circle through start/apex/end, dropped below if odd
+  let cen = circumcircle(A, apex, B);
+  if (!cen || cen.y < apex.y) cen = { x: (A.x + B.x) / 2, y: apex.y + chord * 0.8 };
+  const R = Math.hypot(apex.x - cen.x, apex.y - cen.y);
+  const bw = Math.max(4, R * 0.05);                         // band thickness scales with the arc
+  rainbows.push({ pts: pts.map(p => ({ x: p.x, y: p.y })), cen, R, bw, golden: !!golden, t: 0, dur: 0.85, life: 6.5, max: 6.5 });
+}
+function updateRainbows(dt) {
+  for (let i = rainbows.length - 1; i >= 0; i--) {
+    const r = rainbows[i]; r.t += dt; r.life -= dt;
+    if (r.life <= 0) { rainbows.splice(i, 1); continue; }
+    // a golden rainbow keeps shedding a little sparkle dust while it lingers
+    if (r.golden && r.t > r.dur && Math.random() < dt * 16) {
+      const p = r.pts[Math.floor(Math.random() * r.pts.length)];
+      const dx = p.x - r.cen.x, dy = p.y - r.cen.y, d = Math.hypot(dx, dy) || 1;
+      const off = (Math.random() - 0.5) * r.bw * 7;
+      spawn(p.x + dx / d * off, p.y + dy / d * off, { vx: (Math.random() - 0.5) * 12, vy: -6 - Math.random() * 12, hue: 44 + Math.random() * 12, sat: 92, size: 1.4 + Math.random() * 1.8, life: 0.7 + Math.random() * 0.6, glint: true, grav: -3 });
+    }
+  }
+}
+const SPECTRUM = [0, 28, 50, 120, 195, 232, 280];           // ROYGBIV, red on the outside
+function drawRainbows() {
+  if (!rainbows.length) return;
+  g.globalCompositeOperation = 'lighter';
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  for (const r of rainbows) {
+    const fade = r.life > r.max - r.dur ? 1 : Math.min(1, r.life / 2.2);     // full while painting/holding, then ease out
+    const grow = Math.min(1, r.t / r.dur);                                   // paints on from one end like an arc of light
+    const n = Math.max(2, Math.floor(r.pts.length * grow));
+    const bands = r.golden
+      ? [[40, 50], [44, 62], [47, 74], [50, 86], [47, 74], [44, 62], [40, 50]]   // [hue,lum] — a warm golden glow
+      : SPECTRUM.map(h => [h, 60]);
+    bands.forEach((bd, k) => {
+      const off = (3 - k) * r.bw;                                            // band 0 outermost, band 6 innermost
+      g.lineWidth = r.bw * (r.golden ? 1.15 : 1.05);
+      g.strokeStyle = `hsla(${bd[0]},100%,${bd[1]}%,${(r.golden ? 0.5 : 0.42) * fade})`;
+      g.beginPath();
+      for (let i = 0; i < n; i++) {
+        const p = r.pts[i], dx = p.x - r.cen.x, dy = p.y - r.cen.y, d = Math.hypot(dx, dy) || 1;
+        const x = p.x + dx / d * off, y = p.y + dy / d * off;
+        if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+      }
+      g.stroke();
+    });
+    if (r.golden) {                                                          // a shimmer that travels along the gold
+      const tm = now();
+      g.lineWidth = 1.6;
+      for (let i = 1; i < n; i++) {
+        const sh = 0.5 + 0.5 * Math.sin(i * 0.4 - tm * 4);
+        const p0 = r.pts[i - 1], p1 = r.pts[i];
+        g.strokeStyle = `hsla(52,100%,${66 + sh * 14}%,${(0.2 + sh * 0.4) * fade})`;
+        g.beginPath(); g.moveTo(p0.x, p0.y); g.lineTo(p1.x, p1.y); g.stroke();
+      }
+    }
+  }
+  g.globalCompositeOperation = 'source-over';
+}
+
+/* ---------- Recognising what you drew --------------------- */
+function classifyShape(pts, closed, cx, cy) {
+  if (pts.length < 6) return null;
+  const rs = pts.map(p => Math.hypot(p.x - cx, p.y - cy));
+  const mean = rs.reduce((a, b) => a + b, 0) / rs.length;
+  if (mean < 8) return null;
+  const variance = rs.reduce((a, b) => a + (b - mean) * (b - mean), 0) / rs.length;
+  const cv = Math.sqrt(variance) / mean;             // 0 = a perfect circle
+  let wind = 0, prevA = Math.atan2(pts[0].y - cy, pts[0].x - cx);
+  for (let i = 1; i < pts.length; i++) {
+    let a = Math.atan2(pts[i].y - cy, pts[i].x - cx), d = a - prevA;
+    while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+    wind += d; prevA = a;
+  }
+  const turns = Math.abs(wind) / (2 * Math.PI);
+  if (!closed && turns > 1.3) return 'spiral';
+  // an open, wide arch that bows upward in the middle → a rainbow
+  if (!closed && turns < 0.8) {
+    const A = pts[0], B = pts[pts.length - 1];
+    const chord = Math.hypot(B.x - A.x, B.y - A.y);
+    if (chord > 36 && Math.abs(B.x - A.x) > Math.abs(B.y - A.y)) {     // wide, roughly horizontal span
+      let apex = pts[0], ai = 0;
+      for (let i = 0; i < pts.length; i++) if (pts[i].y < apex.y) { apex = pts[i]; ai = i; }
+      const midFrac = ai / (pts.length - 1);                           // apex sits near the middle of the stroke
+      const bowH = Math.min(A.y, B.y) - apex.y;                        // how high it bows above its own ends
+      if (midFrac > 0.22 && midFrac < 0.78 && bowH > chord * 0.16) return 'arc';
+    }
+  }
+  if (closed) {
+    let peaks = 0;
+    for (let i = 0; i < rs.length; i++) {
+      const a = rs[(i - 1 + rs.length) % rs.length], b = rs[i], c = rs[(i + 1) % rs.length];
+      if (b > a && b >= c && b > mean * 1.12) peaks++;
+    }
+    if (peaks >= 4 && cv > 0.18) return 'star';
+    if (cv < 0.30 && heartDip(pts, cx, cy)) return 'heart';
+    if (cv < 0.16) return 'circle';
+  }
+  return null;
+}
+// a heart has a notch at the very top (smaller y is up on the canvas)
+function heartDip(pts, cx, cy) {
+  const rAt = ang => {
+    let best = 1e9, br = 0;
+    for (const p of pts) {
+      const a = Math.atan2(p.y - cy, p.x - cx);
+      let d = Math.abs(a - ang); if (d > Math.PI) d = 2 * Math.PI - d;
+      if (d < best) { best = d; br = Math.hypot(p.x - cx, p.y - cy); }
+    }
+    return br;
+  };
+  const top = rAt(-Math.PI / 2), ul = rAt(-Math.PI / 2 - 0.9), ur = rAt(-Math.PI / 2 + 0.9);
+  return top < ul * 0.82 && top < ur * 0.82;
+}
+function bloomPortal(c) {
+  ring(c.cx, c.cy, 40, 0, { speed: 150, hue: c.hue });
+  ring(c.cx, c.cy, 24, 0, { speed: 80, hue: (c.hue + 60) % 360 });
+  portalChime(panOf(c.cx));
+  auroraFlash = 0.9; mood = Math.min(1, mood + 0.3); save.bond += 3;
+  pixie.flyingTo = { x: c.cx, y: c.cy }; pixie.squash = 0.5; pixie.joy = 1;   // she dives through
+  for (let k = 0; k < 18; k++) {
+    const a = Math.random() * Math.PI * 2, rr = Math.random() * 40;
+    spawn(c.cx + Math.cos(a) * rr, c.cy + Math.sin(a) * rr, { vx: Math.cos(a) * 60, vy: Math.sin(a) * 60, hue: c.hue + (Math.random() - 0.5) * 60, sat: 80, size: 2 + Math.random() * 3, life: 1 + Math.random(), glint: true, grav: -2 });
+  }
+}
+function bloomHeart(c) {
+  heartChime(panOf(c.cx));
+  pixie.blush = 1; pixie.joy = Math.min(1, pixie.joy + 0.6); mood = Math.min(1, mood + 0.3); save.bond += 4;
+  for (let k = 0; k < 16; k++) {
+    const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.2, sp = 40 + Math.random() * 70;
+    spawnHeart(c.cx + (Math.random() - 0.5) * 20, c.cy, Math.cos(a) * sp, Math.sin(a) * sp);
+  }
+  auroraFlash = Math.max(auroraFlash, 0.5);
+}
+function bloomStar(c) {
+  if (ctx) { const t = ctx.currentTime + 0.02; [72, 76, 79, 84, 88].forEach((n, i) => bell(n, t + i * 0.05, 0.04)); }
+  addConstellationStar(c.cx, c.cy, c.hue);             // a drawn star joins your sky forever
+  for (let k = 0; k < 14; k++) {                       // ...and a spray of cute little stars puffs out
+    const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.0, sp = 30 + Math.random() * 80;
+    spawnFloatingStar(c.cx + (Math.random() - 0.5) * 16, c.cy + (Math.random() - 0.5) * 16, Math.cos(a) * sp, Math.sin(a) * sp, c.hue);
+  }
+  ring(c.cx, c.cy, 18, 0, { speed: 90, hue: c.hue });
+  mood = Math.min(1, mood + 0.22); save.bond += 3; auroraFlash = Math.max(auroraFlash, 0.5);
+}
+function bloomSpiral(c) {
+  loopChime(panOf(c.cx));
+  mood = Math.min(1, mood + 0.25); pixie.joy = 1; save.bond += 2;
+  pixie.loop = 1;                                      // triggers a loop-the-loop flourish
+  pixie.vx += 60; pixie.vy -= 120;
+}
+function bloomRainbow(c) {
+  spawnRainbow(c.pts, c.golden);
+  let apex = c.pts[0]; for (const p of c.pts) if (p.y < apex.y) apex = p;
+  if (c.golden) playGolden('harp'); else rainbowOnChime();    // a rising glissando as it arcs open
+  for (let i = 0; i < c.pts.length; i += 2) {                 // a spray of sparkles bursting along the whole arc
+    const p = c.pts[i];
+    spawn(p.x, p.y, {
+      vx: (Math.random() - 0.5) * 30, vy: -10 - Math.random() * 30,
+      hue: c.golden ? 44 + Math.random() * 12 : (i / c.pts.length) * 300,
+      sat: c.golden ? 92 : 95, size: 2 + Math.random() * 2.5, life: 0.8 + Math.random() * 0.8, glint: true, grav: -4,
+    });
+  }
+  pixie.flyingTo = { x: apex.x, y: apex.y - 10 }; pixie.joy = 1;
+  mood = Math.min(1, mood + 0.35); save.bond += 4; auroraFlash = Math.max(auroraFlash, 0.6);
+}
+
+/* ---------- Device motion: tilt & shake (mobile) ---------- */
+let tilt = { x: 0, y: 0 };
+let motionAsked = false, lastShake = 0;
+function requestMotion() {
+  if (motionAsked) return; motionAsked = true;
+  try {
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+      DeviceMotionEvent.requestPermission().then(s => { if (s === 'granted') enableMotion(); }).catch(() => {});
+    } else { enableMotion(); }
+  } catch (e) {}
+}
+function enableMotion() {
+  window.addEventListener('deviceorientation', onTilt);
+  window.addEventListener('devicemotion', onShake);
+}
+function onTilt(e) {
+  if (e.gamma == null) return;                         // left/right & front/back lean
+  tilt.x = Math.max(-1, Math.min(1, e.gamma / 35));
+  tilt.y = Math.max(-1, Math.min(1, ((e.beta || 0) - 30) / 45));
+}
+function onShake(e) {
+  const a = e.accelerationIncludingGravity || e.acceleration; if (!a) return;
+  const mag = Math.hypot(a.x || 0, a.y || 0, a.z || 0), t = now();
+  if (mag > 24 && t - lastShake > 0.6) {
+    lastShake = t;
+    burst(pixie.x, pixie.y, 22, { speed: 150, sat: 80, grav: -10 });
+    if (t - lastGiggle > 0.4) { lastGiggle = t; giggle(panOf(pixie.x)); }
+    pixie.shiver = 1; mood = Math.min(1, mood + 0.08); rouse();
+  }
+}
+
+/* ---------- Blow-to-scatter (mic) ------------------------- */
+// Off by default: we never want to spring a microphone prompt on a calm toy.
+// Flip ENABLE_MIC to true to let a breath into the mic scatter her sparkles.
+const ENABLE_MIC = false;
+let micData = null;
+function initMic() {
+  if (!ENABLE_MIC || micData || !navigator.mediaDevices) return;
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+    ensureAudio();
+    const src = ctx.createMediaStreamSource(stream);
+    const an = ctx.createAnalyser(); an.fftSize = 256; src.connect(an);
+    micData = { an, buf: new Uint8Array(an.frequencyBinCount), last: 0 };
+  }).catch(() => {});
+}
+function pollMic(tNow) {
+  if (!micData) return;
+  micData.an.getByteFrequencyData(micData.buf);
+  let lo = 0; for (let i = 1; i < 8; i++) lo += micData.buf[i]; lo /= 7;
+  if (lo > 150 && tNow - micData.last > 0.18) {
+    micData.last = tNow;
+    for (let k = 0; k < 6; k++) {
+      const a = Math.random() * Math.PI * 2;
+      spawn(pixie.x, pixie.y, { vx: Math.cos(a) * 120, vy: Math.sin(a) * 120 - 20, hue: pixie.hue + (Math.random() - 0.5) * 60, sat: 75, size: 1.6 + Math.random() * 2, life: 0.6, glint: true, grav: -6 });
+    }
+    mood = Math.min(1, mood + 0.02);
+  }
+}
+
+/* a tiny crown she earns at the deepest bond */
+function drawCrown(px, py, sleepy) {
+  g.save();
+  g.translate(px, py - 16);
+  g.rotate(pixie.lean * 0.12 + sleepy * 0.16);
+  g.globalCompositeOperation = 'lighter';
+  g.fillStyle = 'hsla(48, 100%, 70%, 0.95)';
+  const w = 11, base = -2;
+  g.beginPath();
+  g.moveTo(-w, base);
+  g.lineTo(-w * 0.5, base - 7); g.lineTo(-w * 0.25, base - 1);
+  g.lineTo(0, base - 9); g.lineTo(w * 0.25, base - 1);
+  g.lineTo(w * 0.5, base - 7); g.lineTo(w, base);
+  g.closePath(); g.fill();
+  g.fillStyle = 'hsla(0,0%,100%,0.9)';
+  for (const jx of [-w * 0.55, 0, w * 0.55]) { g.beginPath(); g.arc(jx, base - 7.5, 1.1, 0, Math.PI * 2); g.fill(); }
+  g.restore();
+  g.globalCompositeOperation = 'source-over';
+}
+
+/* ---------- The pixie ------------------------------------- */
+const pixie = {
+  x: 0, y: 0, vx: 0, vy: 0,
+  tx: 0, ty: 0,            // target
+  squash: 1,               // squash & stretch
+  flap: 0,                 // wing phase
+  blink: 0,                // 0 open .. 1 shut
+  nextBlink: 1.5,
+  joy: 0,                  // smile amount 0..1
+  hue: 300,
+  flyingTo: null,          // {x,y} a star to chase
+  trace: null,             // pen tip / cast head she races along
+  lookX: 0, lookY: 0,      // smoothed gaze offset (eyes + mouth)
+  wake: 1,                 // 1 wide awake .. 0 fast asleep
+  shiver: 0,               // tickle wiggle
+  lean: 0,                 // leans into petting
+  _wasAwake: true,
+};
+
+/* mood: rises with play, slowly settles. drives sparkle & glow */
+let mood = 0;
+
+/* orbit offset so the pixie floats *near* your hand, never pinned under it */
+let orbit = 0;
+
+/* ---------- Interaction ----------------------------------- */
+const pointer = { x: 0, y: 0, active: false, lastMoveT: 0, prevX: 0, prevY: 0, glowX: 0, glowY: 0 };
+let lastInteract = 0;
+let lastTwinkle = 0;
+let lastTapT = 0, lastTapX = 0, lastTapY = 0;
+let started = false;
+
+/* magical pen + petting state */
+let stroke = null;          // the stroke currently being drawn
+const casts = [];           // finished strokes "playing back" into effects
+let petLevel = 0;           // how much she's being petted (drives content sighs)
+let lastGiggle = 0, lastPenNote = 0, lastBreath = 0, lastCurious = 0, lastTickle = 0, lastPurr = 0;
+let lastAntic = 0, anticCooldown = 8;   // spontaneous little self-entertaining flourishes
+
+/* a spontaneous little antic when she's content but unoccupied — never the same twice in a row */
+function doAntic() {
+  const pick = Math.floor(Math.random() * 4);
+  if (pick === 0) {
+    // a happy loop-the-loop
+    pixie.loop = 1; pixie.joy = Math.min(1, pixie.joy + 0.5);
+    giggle(panOf(pixie.x));
+    burst(pixie.x, pixie.y, 14, { speed: 90, sat: 80, grav: -10 });
+  } else if (pick === 1) {
+    // a sparkle sneeze — a tiny wind-up, then a forward puff of dust
+    pixie.squash = 1.5;
+    setTimeout(() => {
+      pixie.squash = 0.5; pixie.shiver = 0.5;
+      const dir = pixie.lookX >= 0 ? 1 : -1;
+      for (let i = 0; i < 16; i++) {
+        spawn(pixie.x + dir * 10, pixie.y, {
+          vx: dir * (60 + Math.random() * 120), vy: (Math.random() - 0.5) * 60,
+          hue: pixie.hue + (Math.random() - 0.5) * 50, sat: 70,
+          size: 1.5 + Math.random() * 2, life: 0.7 + Math.random() * 0.6, glint: Math.random() < 0.4, grav: -4,
+        });
+      }
+      sneezeChime(panOf(pixie.x));
+    }, 260);
+  } else if (pick === 2) {
+    // chase something unseen: dart to a nearby spot, twinkle, and drift home
+    const a = Math.random() * Math.PI * 2, r = 80 + Math.random() * 120;
+    pixie.flyingTo = { x: pixie.x + Math.cos(a) * r, y: pixie.y + Math.sin(a) * r };
+    twinkle(panOf(pixie.x), 1);
+  } else {
+    // a delighted twirl that flings out a little ring of stars
+    pixie.loop = 0.7; pixie.joy = Math.min(1, pixie.joy + 0.4);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      spawnFloatingStar(pixie.x, pixie.y, Math.cos(a) * 70, Math.sin(a) * 70 - 20, pixie.hue + i * 12);
+    }
+    twinkle(panOf(pixie.x), 1);
+  }
+}
+
+function now() { return performance.now() / 1000; }
+
+function hitPixie(x, y) {
+  const dx = x - pixie.x, dy = y - pixie.y;
+  return Math.hypot(dx, dy) < 56;
+}
+
+function wake() {
+  if (started) return;
+  started = true;
+  lastInteract = now();
+  resumeAudio();
+  document.getElementById('hint').classList.remove('show');
+  requestMotion();                          // ask iOS for tilt/shake (a no-op elsewhere)
+  initMic();                                // best-effort, only if ENABLE_MIC
+
+  if (welcomeBack > 0) {                     // she's so happy you came back
+    welcomeChime(welcomeBack);
+    burst(pixie.x, pixie.y, 14 + welcomeBack * 20, { speed: 90 + welcomeBack * 60, sat: 80, grav: -12 });
+    pixie.joy = 1; pixie.squash = 1.5; pixie.wake = 1; pixie._wasAwake = true;
+    mood = Math.min(1, mood + 0.3 * welcomeBack);
+    auroraFlash = Math.max(auroraFlash, 0.4 + 0.4 * welcomeBack);
+    welcomeBack = 0;
+  }
+  if (giftPending) {                         // a once-a-day present
+    giftPending = false; save.lastGiftDay = todayStr;
+    addConstellationStar(pixie.x + (Math.random() - 0.5) * 220, pixie.y - 120 - Math.random() * 80, save.hue);
+    save.hue = (save.hue + 40 + Math.random() * 90) % 360;   // a fresh favourite colour
+    setTimeout(() => { for (let i = 0; i < 3; i++) spawnTreat(pixie.x + (Math.random() - 0.5) * 120, pixie.y + 40 + Math.random() * 40); }, 600);
+    persist();
+  }
+}
+
+/* nudge her awake if she was dozing; counts as an interaction either way */
+function rouse() {
+  if (pixie.wake < 0.55) {
+    yawnChime();
+    burst(pixie.x, pixie.y, 16, { speed: 90, sat: 70, grav: -10 });
+    auroraFlash = Math.max(auroraFlash, 0.6);
+    pixie.joy = 1; pixie.squash = 1.5; pixie.wake = 1; pixie._wasAwake = true;
+    mood = Math.min(1, mood + 0.2);
+  }
+  lastInteract = now();
+}
+
+function onDown(e) {
+  if (pinch) return;                       // ignore taps mid pinch-zoom
+  const s = getXY(e);
+  const p = screenToWorld(s.x, s.y);
+  wake();
+  pointer.active = true;
+  pointer.x = pointer.prevX = p.x; pointer.y = pointer.prevY = p.y;
+  pointer.glowX = p.x; pointer.glowY = p.y;     // start the glow right under the press, no glide-in
+  rouse();
+  stroke = null;
+
+  // catch a shooting star streaking past (screen-space hit)
+  for (let i = shooters.length - 1; i >= 0; i--) {
+    const sh = shooters[i];
+    if (Math.hypot(s.x - sh.x, s.y - sh.y) < 48) {
+      shooters.splice(i, 1);
+      catchChime(panOf(p.x));
+      ring(p.x, p.y, 22, 0, { speed: 130, hue: sh.hue });
+      addConstellationStar(p.x, p.y, sh.hue);
+      mood = Math.min(1, mood + 0.3); save.bond += 5; auroraFlash = 0.6;
+      pixie.flyingTo = { x: p.x, y: p.y }; pixie.joy = 1;
+      pointer.active = false; return;
+    }
+  }
+  // pop a drifting bubble
+  for (let i = bubbles.length - 1; i >= 0; i--) {
+    const b = bubbles[i];
+    if (Math.hypot(s.x - b.x, s.y - b.y) < b.r + 8) {
+      bubbles.splice(i, 1);
+      popChime(panOf(p.x));
+      burst(p.x, p.y, 14, { speed: 90, hue: 200, sat: 40, grav: -8 });
+      mood = Math.min(1, mood + 0.06); pointer.active = false; return;
+    }
+  }
+  // pick up a treat to hand-feed her
+  const grabbed = treatAt(p.x, p.y);
+  if (grabbed) { draggingTreat = grabbed; grabbed.held = true; return; }
+
+  if (hitPixie(p.x, p.y)) {
+    // boop! happy giggle
+    playGolden('pixie');
+    pixie.squash = 0.55;
+    pixie.joy = 1;
+    mood = Math.min(1, mood + 0.4);
+    burst(pixie.x, pixie.y, 26, { speed: 130, sat: 80, grav: -14 });
+    pixie.vx += (Math.random() - 0.5) * 120;
+    pixie.vy -= 80;
+  } else {
+    // begin a stroke — a tap becomes a star, a drag becomes a drawing
+    stroke = { pts: [p], len: 0, drawing: false, tip: p, downAt: now(), rainbow: rainbowMode, golden: goldenMode };
+  }
+}
+
+const panOf = wx => Math.max(-1, Math.min(1, (wx - cam.x) / ((W / 2) / cam.zoom || 1)));
+
+function onMove(e) {
+  const s = getXY(e);
+  const p = screenToWorld(s.x, s.y);
+  pointer.x = p.x; pointer.y = p.y;
+  if (draggingTreat) { draggingTreat.x = p.x; draggingTreat.y = p.y; lastInteract = now(); return; }
+  if (!started) { pointer.prevX = p.x; pointer.prevY = p.y; return; }
+
+  const dx = p.x - pointer.prevX, dy = p.y - pointer.prevY;
+  const speed = Math.hypot(dx, dy);
+  pointer.prevX = p.x; pointer.prevY = p.y;
+  lastInteract = now();
+  if (speed > 3) rouse();
+  const t = now();
+
+  // ---- magical pen: extend the current stroke ----
+  if (stroke && pointer.active) {
+    const last = stroke.pts[stroke.pts.length - 1];
+    const d = Math.hypot(p.x - last.x, p.y - last.y);
+    if (d > 3) {
+      stroke.pts.push(p); stroke.len += d; stroke.tip = p;
+      if (stroke.len > 14) stroke.drawing = true;
+      // glittering ink trail — gold under the golden pen, a moving rainbow ribbon in rainbow mode
+      const inkHue = goldenMode ? 42 : rainbowMode ? (hueFromY(p.y) + stroke.len * 0.5) % 360 : pixie.hue;
+      const inkJit = goldenMode ? 14 : rainbowMode ? 16 : 50;
+      spawn(p.x + (Math.random() - 0.5) * 6, p.y + (Math.random() - 0.5) * 6, {
+        vx: (Math.random() - 0.5) * 16, vy: (Math.random() - 0.5) * 16 - 6,
+        hue: inkHue + (Math.random() - 0.5) * inkJit, sat: goldenMode ? 92 : rainbowMode ? 95 : 80,
+        size: 1.3 + Math.random() * 1.8, life: (goldenMode ? 0.8 : 0.5) + Math.random() * 0.6, glint: goldenMode || rainbowMode || Math.random() < 0.3, grav: -6,
+      });
+      if (stroke.drawing && t - lastPenNote > 0.085) {
+        lastPenNote = t;
+        (goldenMode ? goldenNote : rainbowMode ? rainbowNote : penNote)(p.y, panOf(p.x));
+      }
+    }
+    return;                                   // while drawing, no pet/tickle/twinkle
+  }
+
+  // faint dust under a moving hand
+  if (speed > 2 && Math.random() < 0.5) {
+    spawn(p.x + (Math.random() - 0.5) * 12, p.y + (Math.random() - 0.5) * 12, {
+      vx: dx * 0.4 + (Math.random() - 0.5) * 20,
+      vy: dy * 0.4 + (Math.random() - 0.5) * 20,
+      hue: pixie.hue + (Math.random() - 0.5) * 60, sat: 60,
+      size: 1.2 + Math.random() * 1.6, life: 0.5 + Math.random() * 0.5, grav: -4,
+    });
+  }
+
+  const dist = Math.hypot(p.x - pixie.x, p.y - pixie.y);
+
+  // ---- tickle: fast little motions right over her ----
+  if (dist < 46 && speed > 13) {
+    lastTickle = t;                              // marks tickling so petting can't sneak in
+    // keep her scrunched up & laughing continuously while you wiggle...
+    pixie.shiver = Math.min(1, pixie.shiver + 0.2);
+    pixie.joy = Math.min(1, pixie.joy + 0.12);
+    // ...but only let a giggle *burst* every ~0.55s so it never machine-guns
+    if (t - lastGiggle > 0.55) {
+      lastGiggle = t;
+      giggle(panOf(pixie.x));
+      mood = Math.min(1, mood + 0.05);
+      pixie.vx += (Math.random() - 0.5) * 55; pixie.vy -= 16;
+    }
+    return;
+  }
+
+  // ---- pet: slow stroke over her (holding, and not in the middle of a tickle) ----
+  if (dist < 46 && speed > 0.4 && speed < 11 && pointer.active && t - lastTickle > 0.4) {
+    petLevel = Math.min(1, petLevel + 0.05);
+    pixie.joy = Math.min(1, pixie.joy + 0.04);
+    mood = Math.min(1, mood + 0.01);
+    pixie.lean = Math.max(-1, Math.min(1, dx * 0.05));
+    return;
+  }
+
+  // ---- gentle chime when she drifts near your hand ----
+  if (dist < 130 && speed > 5 && t - lastTwinkle > 0.22 && Math.random() < 0.5) {
+    lastTwinkle = t;
+    twinkle(panOf(pixie.x), 0.7 + mood * 0.6);
+    mood = Math.min(1, mood + 0.015);
+    pixie.joy = Math.min(1, pixie.joy + 0.15);
+  }
+}
+
+function onUp() {
+  if (draggingTreat) {
+    const tr = draggingTreat; tr.held = false; draggingTreat = null; pointer.active = false;
+    if (Math.hypot(pixie.x - tr.x, pixie.y - tr.y) < 42) feedTreat(tr);   // dropped on her → nibble
+    return;
+  }
+  pointer.active = false;
+  if (!stroke) return;
+  if (stroke.len < 16 && !stroke.drawing) {
+    // it was a tap, not a drawing
+    const p = stroke.tip;
+    const t = now();
+    const isDouble = (t - lastTapT < 0.32) && Math.hypot(p.x - lastTapX, p.y - lastTapY) < 80;
+    lastTapT = t; lastTapX = p.x; lastTapY = p.y;
+    if (isDouble) {
+      playGolden('crystal');
+      mood = Math.min(1, mood + 0.3);
+      ring(p.x, p.y, 34, 0, { speed: 150 });
+      auroraFlash = 0.7;
+    } else {
+      playGolden('harp');
+      mood = Math.min(1, mood + 0.12);
+      spawnTreat(p.x, p.y);                  // a single tap leaves a treat for her to nibble
+      burst(p.x, p.y, 8, { speed: 50, hue: 50, sat: 70, grav: -6 });
+    }
+  } else {
+    castStroke(stroke.pts);
+  }
+  stroke = null;
+}
+
+/* ---------- Magical pen ----------------------------------- */
+// re-space a freehand path into even points so the playback melody is steady
+function resample(pts, step) {
+  if (pts.length < 2) return pts.map(p => ({ x: p.x, y: p.y }));
+  const out = [{ x: pts[0].x, y: pts[0].y }];
+  let prev = { x: pts[0].x, y: pts[0].y }, dist = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const curr = pts[i];
+    let segLen = Math.hypot(curr.x - prev.x, curr.y - prev.y);
+    while (dist + segLen >= step && out.length < 160) {
+      const tt = (step - dist) / segLen;
+      const np = { x: prev.x + (curr.x - prev.x) * tt, y: prev.y + (curr.y - prev.y) * tt };
+      out.push(np); prev = np;
+      segLen = Math.hypot(curr.x - prev.x, curr.y - prev.y); dist = 0;
+    }
+    dist += segLen; prev = { x: curr.x, y: curr.y };
+  }
+  return out;
+}
+function bboxDiag(pts) {
+  let minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9;
+  for (const p of pts) { if (p.x < minx) minx = p.x; if (p.x > maxx) maxx = p.x; if (p.y < miny) miny = p.y; if (p.y > maxy) maxy = p.y; }
+  return Math.hypot(maxx - minx, maxy - miny);
+}
+// turn a finished stroke into a "cast" that the pixie traces & plays
+function castStroke(rawPts) {
+  const pts = resample(rawPts, 11);
+  if (pts.length < 2) return;
+  let cx = 0, cy = 0; pts.forEach(p => { cx += p.x; cy += p.y; }); cx /= pts.length; cy /= pts.length;
+  const a = pts[0], b = pts[pts.length - 1];
+  const span = Math.max(40, bboxDiag(pts));
+  const closed = Math.hypot(b.x - a.x, b.y - a.y) < span * 0.28 && pts.length > 8;
+  const dur = Math.max(0.5, Math.min(2.6, pts.length * 0.05));
+  const shape = classifyShape(pts, closed, cx, cy);   // circle / heart / star / spiral?
+  casts.push({ pts, dur, t: 0, idx: 0, closed, cx, cy, hue: pixie.hue, bloomed: false, fade: 0, shape, rainbow: rainbowMode, golden: goldenMode });
+  mood = Math.min(1, mood + 0.22);
+  pixie.joy = Math.min(1, pixie.joy + 0.4);
+  if (ctx) bell(84, ctx.currentTime + 0.02, 0.03);
+}
+// advance every cast, sprinkling sparkles + notes; returns the live head to trace
+function processCasts(dt) {
+  let head = null;
+  for (let i = casts.length - 1; i >= 0; i--) {
+    const c = casts[i];
+    c.t += dt;
+    if (!c.bloomed) {
+      const targetIdx = Math.min(c.pts.length - 1, Math.floor((c.t / c.dur) * c.pts.length));
+      while (c.idx < targetIdx) {
+        c.idx++;
+        const pt = c.pts[c.idx];
+        spawn(pt.x, pt.y, {
+          vx: (Math.random() - 0.5) * 24, vy: (Math.random() - 0.5) * 24 - 10,
+          hue: c.golden ? 42 + (Math.random() - 0.5) * 16 : c.rainbow ? (hueFromY(pt.y) + c.idx * 8) % 360 : c.hue + (Math.random() - 0.5) * 40,
+          sat: c.golden ? 92 : c.rainbow ? 95 : 85,
+          size: 1.8 + Math.random() * 2.2, life: 0.6 + Math.random() * 0.7, glint: c.golden || c.rainbow || Math.random() < 0.5, grav: -8,
+        });
+        if (c.idx % 2 === 0) (c.golden ? goldenNote : c.rainbow ? rainbowNote : penNote)(pt.y, panOf(pt.x), 0.045);
+      }
+      head = c.pts[Math.min(c.pts.length - 1, c.idx)];
+      if (c.t / c.dur >= 1) { c.bloomed = true; bloomCast(c); }
+    } else {
+      c.fade += dt;
+      if (c.fade > 0.7) casts.splice(i, 1);
+    }
+  }
+  return head;
+}
+function bloomCast(c) {
+  if (c.shape === 'circle') return bloomPortal(c);
+  if (c.shape === 'heart') return bloomHeart(c);
+  if (c.shape === 'star') return bloomStar(c);
+  if (c.shape === 'spiral') return bloomSpiral(c);
+  if (c.shape === 'arc' && (c.rainbow || c.golden)) return bloomRainbow(c);   // only with a rainbow pen
+  if (c.closed) {
+    ring(c.cx, c.cy, 30, 0, { speed: 120, hue: c.hue });
+    if (ctx) { const t = ctx.currentTime + 0.02; [0, 4, 7, 12].forEach((iv, i) => bell(72 + iv, t + i * 0.05, 0.04)); }
+    for (let k = 0; k < 14; k++) {
+      const ang = Math.random() * Math.PI * 2, rr = Math.random() * 30;
+      spawn(c.cx + Math.cos(ang) * rr, c.cy + Math.sin(ang) * rr, {
+        vx: 0, vy: -20 - Math.random() * 20, hue: c.hue + (Math.random() - 0.5) * 50, sat: 75,
+        size: 2 + Math.random() * 3, life: 1.2 + Math.random() * 0.8, glint: Math.random() < 0.4, grav: -2,
+      });
+    }
+    auroraFlash = Math.max(auroraFlash, 0.5);
+  } else {
+    const end = c.pts[c.pts.length - 1];
+    burst(end.x, end.y, 20, { speed: 120, hue: c.hue, sat: 85, grav: -10 });
+    if (ctx) bell(96, ctx.currentTime + 0.02, 0.045);
+  }
+}
+function drawPolyline(pts, hue, alpha, headIdx, rainbow, golden) {
+  if (pts.length < 2) return;
+  g.globalCompositeOperation = 'lighter';
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  if (golden) {
+    // a warm, shimmering golden ribbon — amber halo, gold core, and a travelling glint
+    const tm = now();
+    const trace = () => { g.beginPath(); g.moveTo(pts[0].x, pts[0].y); for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y); g.stroke(); };
+    // kept fairly low in luminance: the trail uses additive 'lighter' blending, so a
+    // high-lum yellow would clip to white over a bright sky instead of reading as gold
+    g.strokeStyle = `hsla(36,100%,46%,${0.32 * alpha})`; g.lineWidth = 14; trace();   // amber halo
+    g.strokeStyle = `hsla(44,100%,55%,${0.72 * alpha})`; g.lineWidth = 6; trace();    // gold core
+    for (let i = 1; i < pts.length; i++) {                                            // shimmer that drifts along
+      const sh = 0.5 + 0.5 * Math.sin(i * 0.5 - tm * 4);
+      g.strokeStyle = `hsla(50,100%,${58 + sh * 16}%,${(0.28 + sh * 0.45) * alpha})`;
+      g.lineWidth = 1.6;
+      g.beginPath(); g.moveTo(pts[i - 1].x, pts[i - 1].y); g.lineTo(pts[i].x, pts[i].y); g.stroke();
+    }
+    if (headIdx != null) {
+      const h = pts[Math.max(0, Math.min(pts.length - 1, Math.floor(headIdx)))];
+      drawSparkle(h.x, h.y, 6, 48, 95, alpha, true);
+    }
+    g.globalCompositeOperation = 'source-over';
+    return;
+  }
+  if (rainbow) {
+    // a real rainbow: the line itself is full-spectrum, hue rolling along the path
+    let cum = 0; const segHue = [0];
+    for (let i = 1; i < pts.length; i++) {
+      cum += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+      segHue[i] = cum * 0.9;
+    }
+    const band = (w, lum, a) => {
+      g.lineWidth = w;
+      for (let i = 1; i < pts.length; i++) {
+        g.strokeStyle = `hsla(${segHue[i] % 360},100%,${lum}%,${a * alpha})`;
+        g.beginPath(); g.moveTo(pts[i - 1].x, pts[i - 1].y); g.lineTo(pts[i].x, pts[i].y); g.stroke();
+      }
+    };
+    band(13, 58, 0.30);                                       // soft outer colour glow
+    band(6, 62, 0.80);                                        // vivid saturated core
+    g.strokeStyle = `hsla(0,0%,100%,${0.28 * alpha})`;        // thin white sheen (keeps it sparkly, not washed out)
+    g.lineWidth = 1;
+    g.beginPath(); g.moveTo(pts[0].x, pts[0].y); for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y); g.stroke();
+    if (headIdx != null) {
+      const hi = Math.max(0, Math.min(pts.length - 1, Math.floor(headIdx)));
+      drawSparkle(pts[hi].x, pts[hi].y, 5, segHue[hi] % 360, 90, alpha, true);
+    }
+    g.globalCompositeOperation = 'source-over';
+    return;
+  }
+  const trace = () => { g.beginPath(); g.moveTo(pts[0].x, pts[0].y); for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y); g.stroke(); };
+  g.strokeStyle = `hsla(${hue},100%,72%,${0.22 * alpha})`; g.lineWidth = 11; trace();
+  g.strokeStyle = `hsla(${(hue + 40) % 360},100%,88%,${0.55 * alpha})`; g.lineWidth = 4; trace();
+  g.strokeStyle = `hsla(0,0%,100%,${0.5 * alpha})`; g.lineWidth = 1.3; trace();
+  if (headIdx != null) {
+    const h = pts[Math.max(0, Math.min(pts.length - 1, Math.floor(headIdx)))];
+    drawSparkle(h.x, h.y, 5, (hue + 60) % 360, 85, alpha, true);
+  }
+  g.globalCompositeOperation = 'source-over';
+}
+function drawInk() {
+  for (const c of casts) {
+    const alpha = c.bloomed ? Math.max(0, 1 - c.fade / 0.7) : 1;
+    drawPolyline(c.pts, c.hue, alpha * 0.9, c.bloomed ? null : c.idx, c.rainbow, c.golden);
+  }
+  if (stroke && stroke.pts.length > 1) drawPolyline(stroke.pts, pixie.hue, 0.95, stroke.pts.length - 1, stroke.rainbow, stroke.golden);
+  else if (stroke) drawSparkle(stroke.tip.x, stroke.tip.y, 4, pixie.hue, 80, 0.8, true);
+}
+
+function getXY(e) {
+  if (e.touches && e.touches[0]) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  if (e.changedTouches && e.changedTouches[0]) return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+  return { x: e.clientX, y: e.clientY };
+}
+
+// passive: none of these call preventDefault, so let the browser dispatch them
+// without blocking scroll/compositing — keeps input decoupled and snappy.
+canvas.addEventListener('pointerdown', onDown, { passive: true });
+window.addEventListener('pointermove', onMove, { passive: true });
+window.addEventListener('pointerup', onUp, { passive: true });
+window.addEventListener('pointercancel', onUp, { passive: true });
+// keep the canvas from eating gestures awkwardly on touch devices
+canvas.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+
+/* ---------- Zoom controls --------------------------------- */
+// mouse wheel / trackpad scroll & pinch -> zoom toward the cursor
+window.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  wake();
+  const factor = Math.exp(-e.deltaY * 0.0016);
+  setZoom(cam.targetZoom * factor, e.clientX, e.clientY);
+}, { passive: false });
+
+// two-finger pinch on touch screens
+let pinch = null;
+function touchInfo(e) {
+  const a = e.touches[0], b = e.touches[1];
+  const dx = b.clientX - a.clientX, dy = b.clientY - a.clientY;
+  return { dist: Math.hypot(dx, dy) || 1, x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 };
+}
+window.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 2) { wake(); pinch = touchInfo(e); }
+}, { passive: false });
+window.addEventListener('touchmove', (e) => {
+  if (e.touches.length === 2 && pinch) {
+    e.preventDefault();
+    const ti = touchInfo(e);
+    setZoom(cam.targetZoom * (ti.dist / pinch.dist), ti.x, ti.y);
+    pinch = ti;
+  }
+}, { passive: false });
+function endPinch(e) { if (!e.touches || e.touches.length < 2) pinch = null; }
+window.addEventListener('touchend', endPinch);
+window.addEventListener('touchcancel', endPinch);
+
+// keyboard: +/- to zoom, 0 to reset
+window.addEventListener('keydown', (e) => {
+  if (e.key === '+' || e.key === '=') setZoom(cam.targetZoom * 1.15, W / 2, H / 2);
+  else if (e.key === '-' || e.key === '_') setZoom(cam.targetZoom / 1.15, W / 2, H / 2);
+  else if (e.key === '0') setZoom(1, W / 2, H / 2);
+});
+
+/* mute toggle */
+const muteBtn = document.getElementById('mute');
+const sndIcon = document.getElementById('sndIcon');
+muteBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  muted = !muted;
+  if (master) master.gain.setTargetAtTime(muted ? 0 : 0.85, ctx.currentTime, 0.05);
+  sndIcon.innerHTML = muted
+    ? '<path d="M4 9v6h4l5 5V4L8 9H4zm15.5 3l2.5-2.5-1.4-1.4L18 10.6 15.4 8 14 9.4 16.6 12 14 14.6l1.4 1.4L18 13.4l2.6 2.6 1.4-1.4L19.5 12z"/>'
+    : '<path d="M4 9v6h4l5 5V4L8 9H4zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4zM14 2.5v2.1a7 7 0 0 1 0 13.8v2.1A9 9 0 0 0 14 2.5z"/>';
+});
+
+/* rainbow pen toggle */
+const rainbowBtn = document.getElementById('rainbow');
+let rainbowMode = false;
+rainbowBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  rainbowMode = !rainbowMode;
+  rainbowBtn.classList.toggle('on', rainbowMode);
+  if (rainbowMode && goldenMode) { goldenMode = false; goldenBtn.classList.remove('on'); }
+  if (rainbowMode) {
+    rainbowOnChime();
+    // a happy ring of full-spectrum sparkles bursts out of Pixie
+    for (let i = 0; i < 22; i++) {
+      const a = (i / 22) * Math.PI * 2;
+      spawn(pixie.x + Math.cos(a) * 16, pixie.y + Math.sin(a) * 16, {
+        vx: Math.cos(a) * 90, vy: Math.sin(a) * 90, hue: (i / 22) * 360, sat: 95,
+        size: 2 + Math.random() * 2.5, life: 0.9 + Math.random() * 0.6, glint: true, grav: -2,
+      });
+    }
+  }
+});
+
+/* golden rainbow — a gentle reward for time spent together *this visit*. It's never
+   permanent: every session starts without it, and once you've played a few minutes
+   (counting only time she's awake, so wandering off pauses the clock) it quietly appears. */
+const GOLDEN_SECONDS = 240;                          // ~4 minutes of awake play
+const goldenBtn = document.getElementById('golden');
+let goldenMode = false;
+let sessionPlay = 0, goldenShown = false;
+
+function revealGolden() {
+  goldenBtn.classList.add('shown', 'reveal');
+  playGolden('crystal');                             // a soft bell flourish, not a fanfare
+  auroraFlash = Math.max(auroraFlash, 0.45);
+  mood = Math.min(1, mood + 0.25); pixie.joy = Math.min(1, pixie.joy + 0.6);
+  for (let i = 0; i < 18; i++) {                     // a gentle golden shimmer around her
+    const a = (i / 18) * Math.PI * 2;
+    spawn(pixie.x + Math.cos(a) * 14, pixie.y + Math.sin(a) * 14, {
+      vx: Math.cos(a) * 70, vy: Math.sin(a) * 70, hue: 42 + Math.random() * 14, sat: 90,
+      size: 2 + Math.random() * 2, life: 1 + Math.random() * 0.6, glint: true, grav: -2,
+    });
+  }
+}
+function checkGoldenUnlock(dt) {
+  if (goldenShown || !started || pixie.wake <= 0.5) return;   // only count time she's awake & with you
+  sessionPlay += dt;
+  if (sessionPlay >= GOLDEN_SECONDS) { goldenShown = true; revealGolden(); }
+}
+
+goldenBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  goldenMode = !goldenMode;
+  goldenBtn.classList.toggle('on', goldenMode);
+  if (goldenMode && rainbowMode) { rainbowMode = false; rainbowBtn.classList.remove('on'); }
+  if (goldenMode) {
+    playGolden('crystal');
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * Math.PI * 2;
+      spawn(pixie.x + Math.cos(a) * 16, pixie.y + Math.sin(a) * 16, {
+        vx: Math.cos(a) * 95, vy: Math.sin(a) * 95, hue: 40 + Math.random() * 16, sat: 92,
+        size: 2 + Math.random() * 2.5, life: 0.9 + Math.random() * 0.6, glint: true, grav: -2,
+      });
+    }
+  }
+});
+
+/* ---------- Loop ------------------------------------------ */
+let auroraFlash = 0;
+let lastT = now();
+
+function update(dt) {
+  const tNow = now();
+  curSky = skyNow();
+
+  // ---- she remembers you: bond grows mostly while you actively play ----
+  // (idling barely moves it; delighting her — feeding, drawing, catching — adds chunks)
+  save.bond += dt * (0.02 + mood * 0.28 + (pointer.active ? 0.12 : 0));
+  if (tNow - lastPersist > 5) { lastPersist = tNow; persist(); }
+  checkGoldenUnlock(dt);   // after a few minutes of awake play this session, the golden pen appears
+
+  // ---- the cursor glow glides toward the pointer every frame ----
+  // Pointer events (especially trackpad / embedded-browser) arrive in irregular
+  // bursts with gaps, so snapping the glow straight to the last event makes it
+  // freeze-then-jump while the dt-driven world stays smooth. Easing toward the
+  // latest target each frame bridges those gaps into one continuous glide.
+  const gk = 1 - Math.exp(-dt / 0.055);
+  pointer.glowX += (pointer.x - pointer.glowX) * gk;
+  pointer.glowY += (pointer.y - pointer.glowY) * gk;
+
+  // ---- decays for the new expressions ----
+  pixie.blush = Math.max(0, (pixie.blush || 0) - dt * 0.5);
+  pixie.fed = Math.max(0, (pixie.fed || 0) - dt * 0.6);
+  if (pixie.loop > 0) { pixie.loop -= dt * 1.4; pixie.spin = (pixie.spin || 0) + dt * 16; if (pixie.loop <= 0) { pixie.loop = 0; pixie.spin = 0; } }
+
+  // ---- rare delights + living weather ----
+  const night = curSky.star;
+  nextShooter -= dt; if (nextShooter <= 0) { nextShooter = 8 + Math.random() * 16; if (night > 0.3 && shooters.length < 2) spawnShooter(); }
+  nextBubble -= dt; if (nextBubble <= 0) { nextBubble = 12 + Math.random() * 16; if (bubbles.length < 3) spawnBubble(); }
+  if (started) { nextVisit -= dt; if (nextVisit <= 0) { nextVisit = 80 + Math.random() * 90; if (!companion) spawnCompanion(); } }
+  updateShooters(dt); updateBubbles(dt); updateCompanion(dt);
+  updateTreats(dt); updateAmbient(dt); updateHearts(dt); updateFloatingStars(dt); updateRainbows(dt); pollMic(tNow);
+
+  // ---- smooth zoom, anchored to the focal point ----
+  if (Math.abs(cam.zoom - cam.targetZoom) > 0.0005) {
+    const fx = cam.focal.x, fy = cam.focal.y;
+    const wx = (fx - W / 2) / cam.zoom + cam.x;   // world point under focal, now
+    const wy = (fy - H / 2) / cam.zoom + cam.y;
+    cam.zoom += (cam.targetZoom - cam.zoom) * Math.min(1, dt * 14);
+    cam.x = wx - (fx - W / 2) / cam.zoom;         // keep that point under focal
+    cam.y = wy - (fy - H / 2) / cam.zoom;
+  }
+
+  // ---- magical pen: what the pixie should race along ----
+  let traceWant = (stroke && stroke.drawing) ? stroke.tip : null;
+  const castHead = processCasts(dt);
+  if (castHead) traceWant = castHead;
+  pixie.trace = traceWant;
+
+  // ---- treats you set out: she drifts over to nibble the nearest ----
+  if (!pixie.trace && treats.length) {
+    let best = null, bd = 1e9;
+    for (const tr of treats) { if (tr.held) continue; const d = Math.hypot(tr.x - pixie.x, tr.y - pixie.y); if (d < bd) { bd = d; best = tr; } }
+    if (best) pixie.flyingTo = { x: best.x, y: best.y };
+  }
+
+  // ---- pixie movement: spring toward a gently orbiting target ----
+  orbit += dt * 0.7;
+  let homeX, homeY;
+  if (pixie.trace) {
+    homeX = pixie.trace.x; homeY = pixie.trace.y;
+  } else if (pixie.flyingTo) {
+    homeX = pixie.flyingTo.x; homeY = pixie.flyingTo.y;
+  } else if (started) {
+    // float near the pointer with a soft circling offset
+    const r = 70 + Math.sin(orbit * 0.6) * 18;
+    homeX = pointer.x + Math.cos(orbit) * r;
+    homeY = pointer.y + Math.sin(orbit * 1.1) * r * 0.7 - 24;
+  } else {
+    // before waking: drift around screen centre, breathing
+    homeX = W / 2 + Math.cos(orbit * 0.5) * Math.min(W, H) * 0.14;
+    homeY = H / 2 + Math.sin(orbit * 0.7) * Math.min(W, H) * 0.1;
+  }
+
+  const k = pixie.trace ? 12 : pixie.flyingTo ? 9 : 3.2;     // snappy when tracing a line
+  const damp = pixie.trace ? 5 : pixie.flyingTo ? 4.5 : 3.0;
+  pixie.vx += (homeX - pixie.x) * k * dt;
+  pixie.vy += (homeY - pixie.y) * k * dt;
+  pixie.vx -= pixie.vx * damp * dt;
+  pixie.vy -= pixie.vy * damp * dt;
+  pixie.x += pixie.vx * dt;
+  pixie.y += pixie.vy * dt;
+
+  // gentle idle bob
+  pixie.y += Math.sin(tNow * 1.6) * 6 * dt;
+
+  // arrive at a chased star -> twinkle and release
+  if (pixie.flyingTo) {
+    const d = Math.hypot(pixie.flyingTo.x - pixie.x, pixie.flyingTo.y - pixie.y);
+    if (d < 26) {
+      burst(pixie.x, pixie.y, 18, { speed: 110, sat: 80, grav: -12 });
+      bell(96, ctx ? ctx.currentTime + 0.02 : 0, 0.04);
+      pixie.flyingTo = null;
+      pixie.joy = Math.min(1, pixie.joy + 0.5);
+    }
+  }
+
+  // ---- expression & animation ----
+  const speed = Math.hypot(pixie.vx, pixie.vy);
+  pixie.flap += dt * ((4 + 8 * pixie.wake) + speed * 0.03 + mood * 6);
+  pixie.squash += (1 - pixie.squash) * Math.min(1, dt * 8);
+  pixie.joy += (0 - pixie.joy) * Math.min(1, dt * 0.6);
+  pixie.hue = (pixie.hue + dt * (12 + mood * 30) * (1 - bondTier() * 0.2)) % 360;
+  pixie.shiver += (0 - pixie.shiver) * Math.min(1, dt * 4);
+  pixie.lean += (0 - pixie.lean) * Math.min(1, dt * 3);
+  petLevel = Math.max(0, petLevel - dt * 1.1);
+  // gentle content sighs while she's being petted (intermittent, never a drone)
+  if (petLevel > 0.25 && tNow - lastPurr > 1.1) {
+    lastPurr = tNow;
+    purrSigh(panOf(pixie.x), Math.min(1, petLevel + 0.3));
+  }
+
+  // ---- wakefulness: she drifts drowsy, then asleep, unless you play ----
+  const tIdle = tNow - lastInteract;
+  if (started) {
+    const wakeTarget = tIdle < 7 ? 1 : tIdle < 15 ? 0.45 : 0.1;
+    pixie.wake += (wakeTarget - pixie.wake) * Math.min(1, dt * 1.6);
+    if (pixie.wake < 0.5 && pixie._wasAwake) { pixie._wasAwake = false; yawnChime(); }
+    if (pixie.wake > 0.6) pixie._wasAwake = true;
+  }
+
+  // blinking
+  pixie.nextBlink -= dt;
+  if (pixie.nextBlink <= 0 && pixie.blink === 0) { pixie.blink = 0.001; }
+  if (pixie.blink > 0) {
+    pixie.blink += dt * 9;
+    if (pixie.blink >= 2) { pixie.blink = 0; pixie.nextBlink = 1.5 + Math.random() * 3.5; }
+  }
+
+  // ---- mood drift & sparkle aura ----
+  mood = Math.max(0, mood - dt * 0.06);
+  const auraRate = 4 + mood * 40 + speed * 0.05;
+  if (Math.random() < auraRate * dt) {
+    const a = Math.random() * Math.PI * 2, rr = 16 + Math.random() * 22;
+    spawn(pixie.x + Math.cos(a) * rr, pixie.y + Math.sin(a) * rr, {
+      vx: Math.cos(a) * 20 + pixie.vx * 0.2, vy: Math.sin(a) * 20 + pixie.vy * 0.2,
+      hue: pixie.hue + (Math.random() - 0.5) * 70, sat: 70,
+      size: 1.4 + Math.random() * 2.2, life: 0.6 + Math.random() * 0.8,
+      glint: Math.random() < 0.3, grav: -8,
+    });
+  }
+
+  // ---- her quiet moments: sleeping, or curious about your cursor ----
+  if (started) {
+    if (pixie.wake < 0.28) {
+      // asleep: a slow breathing lullaby with the odd drifting dream
+      if (tNow - lastBreath > 5.5) {
+        lastBreath = tNow;
+        sleepBreath();
+        spawn(pixie.x + 8, pixie.y - 14, { vx: 6, vy: -16, hue: 200, sat: 40, size: 2, life: 1.6, glint: true, grav: -3 });
+      }
+    } else if (pixie.wake > 0.7 && tIdle > 3 && tIdle < 7 && tNow - lastCurious > 4 && Math.random() < dt * 0.4) {
+      // awake but you've paused — she wonders where you went
+      lastCurious = tNow;
+      curiousChime(panOf(pixie.x));
+    }
+
+    // ---- spontaneous antics: content & unoccupied, she entertains herself ----
+    if (pixie.wake > 0.7 && !stroke && !pixie.trace && !pixie.flyingTo && petLevel < 0.2
+        && tIdle > 1.2 && tIdle < 7 && tNow - lastAntic > anticCooldown && Math.random() < dt * 0.5) {
+      lastAntic = tNow;
+      anticCooldown = 7 + Math.random() * 9;
+      doAntic();
+    }
+  }
+
+  // ---- particles ----
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i];
+    p.life -= dt;
+    if (p.life <= 0) { parts.splice(i, 1); continue; }
+    p.vy += p.grav * dt;
+    p.vx += tilt.x * 26 * dt; p.vy += tilt.y * 18 * dt;   // a tilt of the device drifts the dust
+    p.vx *= Math.pow(p.drag, dt * 60);
+    p.vy *= Math.pow(p.drag, dt * 60);
+    p.x += p.vx * dt; p.y += p.vy * dt;
+  }
+
+  auroraFlash = Math.max(0, auroraFlash - dt * 0.8);
+}
+
+function render() {
+  const tNow = now();
+  const sky = curSky || skyNow();
+
+  // ---- background gradient (shifts with the real time of day) ----
+  g.fillStyle = skyGradient(sky);
+  g.fillRect(0, 0, W, H);
+
+  // ---- aurora blobs ----
+  g.globalCompositeOperation = 'lighter';
+  for (const b of blobs) {
+    const cx = W * (0.5 + 0.4 * Math.sin(tNow * 0.07 + b.px));
+    const cy = H * (0.45 + 0.35 * Math.sin(tNow * 0.05 + b.py));
+    const R = Math.max(W, H) * b.r;
+    const a = (0.10 + auroraFlash * 0.10) * (0.4 + 0.6 * sky.aur);
+    g.globalAlpha = a;
+    g.drawImage(blobSprite(b), cx - R, cy - R, R * 2, R * 2);
+  }
+  g.globalAlpha = 1;
+
+  // ---- stars (fade away in daylight) ----
+  for (const s of stars) {
+    const tw = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(tNow * s.sp + s.ph));
+    g.fillStyle = `rgba(255,255,255,${tw * 0.8 * sky.star})`;
+    g.beginPath(); g.arc(s.x, s.y, s.r, 0, Math.PI * 2); g.fill();
+  }
+  g.globalCompositeOperation = 'source-over';
+
+  // ---- living weather + rare sky visitors (screen space) ----
+  drawAmbient(sky.star);
+  drawShooters();
+  drawBubbles();
+
+  // ---- everything below lives in the zoomable "world" ----
+  g.save();
+  g.translate(W / 2, H / 2);
+  g.scale(cam.zoom, cam.zoom);
+  g.translate(-cam.x, -cam.y);
+
+  // ---- the night sky you've slowly built ----
+  drawConstellation(tNow);
+
+  // ---- rainbows you've arced across the sky (behind the ink & sparkles) ----
+  drawRainbows();
+
+  // ---- magical-pen ink (under the sparkles) ----
+  drawInk();
+
+  // ---- particles ----
+  for (const p of parts) {
+    const a = Math.max(0, p.life / p.max);
+    drawSparkle(p.x, p.y, p.size, p.hue, p.sat, a * 0.9, p.glint);
+  }
+
+  drawTreats();
+  drawHearts();
+  drawFloatingStars();
+  drawPixie(tNow);
+  drawCompanion(tNow);
+
+  // ---- soft cursor glow ----
+  if (started) {
+    g.globalCompositeOperation = 'lighter';
+    const gx = pointer.glowX, gy = pointer.glowY;
+    g.globalAlpha = 0.5;
+    g.drawImage(glowSprite(), gx - 26, gy - 26, 52, 52);
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+  }
+
+  g.restore();
+}
+
+function drawPixie(tNow) {
+  const sleepy = 1 - Math.min(1, Math.max(0, (pixie.wake - 0.18) / 0.5));   // 0 awake .. 1 asleep
+  const content = Math.min(1, petLevel * 1.1 + pixie.joy * 0.3);             // petted / happy squint
+  const px = pixie.x + (Math.random() - 0.5) * pixie.shiver * 5;
+  const py = pixie.y + (Math.random() - 0.5) * pixie.shiver * 5;
+  const breathe = 1 + Math.sin(tNow * (1.6 - sleepy * 0.9)) * (0.04 + sleepy * 0.05);
+  const sx = (2 - pixie.squash) * breathe;   // squash widens
+  const sy = pixie.squash * breathe;
+  const hue = pixie.hue;
+
+  // big soft halo (dims as she falls asleep)
+  g.globalCompositeOperation = 'lighter';
+  const haloR = (70 + mood * 40 + (pixie.fed || 0) * 22 + Math.sin(tNow * 2) * 4) * (0.7 + 0.3 * pixie.wake);
+  const halo = g.createRadialGradient(px, py, 0, px, py, haloR);
+  halo.addColorStop(0, `hsla(${hue}, 90%, 80%, ${(0.35 + mood * 0.25 + bondTier() * 0.05 + (pixie.fed || 0) * 0.08) * (0.4 + 0.6 * pixie.wake)})`);
+  halo.addColorStop(0.5, `hsla(${(hue + 40) % 360}, 90%, 70%, ${0.12 * (0.4 + 0.6 * pixie.wake)})`);
+  halo.addColorStop(1, `hsla(${hue}, 90%, 70%, 0)`);
+  g.fillStyle = halo;
+  g.beginPath(); g.arc(px, py, haloR, 0, Math.PI * 2); g.fill();
+
+  // ---- wings (fold a little when sleepy) ----
+  const flutter = Math.abs(Math.cos(pixie.flap));        // 0..1 perspective
+  if (bondTier() >= 2) drawWingPair(px, py, (hue + 40) % 360, flutter, 1.6, pixie.wake);  // an extra pair as your bond deepens
+  drawWingPair(px, py, hue, flutter, 1, pixie.wake);     // back pair
+  // ---- body ----
+  g.globalCompositeOperation = 'source-over';
+  g.save();
+  g.translate(px, py);
+  g.rotate(pixie.lean * 0.12 + sleepy * 0.16 + (pixie.spin || 0));   // lean into petting; spin through a loop-the-loop
+  g.scale(sx, sy);
+
+  const bodyR = 17;
+  const body = g.createRadialGradient(-4, -5, 1, 0, 0, bodyR);
+  body.addColorStop(0, 'rgba(255,255,255,1)');
+  body.addColorStop(0.45, `hsla(${hue}, 100%, 88%, 1)`);
+  body.addColorStop(1, `hsla(${hue}, 85%, 66%, 1)`);
+  g.fillStyle = body;
+  g.beginPath(); g.arc(0, 0, bodyR, 0, Math.PI * 2); g.fill();
+
+  // rim light
+  g.globalCompositeOperation = 'lighter';
+  g.fillStyle = `hsla(${(hue + 180) % 360}, 100%, 85%, 0.25)`;
+  g.beginPath(); g.arc(5, 6, bodyR * 0.7, 0, Math.PI * 2); g.fill();
+  g.globalCompositeOperation = 'source-over';
+
+  // ---- face ----
+  // she looks toward your cursor when calm and toward her motion when flitting —
+  // blended (not switched) and eased, so the gaze never snaps
+  const moving = Math.hypot(pixie.vx, pixie.vy);
+  const wgt = Math.max(0, Math.min(1, (moving - 8) / 24));   // 0 = cursor, 1 = motion
+  const tdx = (1 - wgt) * (pointer.x - pixie.x) * 0.05 + wgt * pixie.vx * 0.03;
+  const tdy = (1 - wgt) * (pointer.y - pixie.y) * 0.05 + wgt * pixie.vy * 0.03;
+  pixie.lookX += (Math.max(-3, Math.min(3, tdx)) - pixie.lookX) * 0.2;
+  pixie.lookY += (Math.max(-2.5, Math.min(2.5, tdy)) - pixie.lookY) * 0.2;
+  const lookX = pixie.lookX, lookY = pixie.lookY;
+
+  let baseOpen = 1 - Math.min(1, pixie.blink > 1 ? 2 - pixie.blink : pixie.blink);
+  baseOpen *= (1 - sleepy * 0.95);
+  const happyEyes = (content > 0.5 || pixie.shiver > 0.3) && sleepy < 0.4;
+
+  g.fillStyle = '#241433';
+  g.strokeStyle = '#241433';
+  g.lineWidth = 1.6; g.lineCap = 'round';
+  for (const ex of [-5.5, 5.5]) {
+    const exx = ex + lookX, eyy = -1 + lookY;
+    if (sleepy > 0.55) {
+      // sleeping: a soft closed curve
+      g.beginPath(); g.arc(exx, eyy - 0.5, 3, 0.15 * Math.PI, 0.85 * Math.PI, false); g.stroke();
+    } else if (happyEyes) {
+      // content squint ^_^
+      g.beginPath(); g.arc(exx, eyy + 1.5, 3, 1.15 * Math.PI, 1.85 * Math.PI, false); g.stroke();
+    } else {
+      const eyeH = 4.2 * (0.15 + 0.85 * baseOpen);
+      g.beginPath(); g.ellipse(exx, eyy, 2.6, eyeH, 0, 0, Math.PI * 2); g.fill();
+      if (baseOpen > 0.4) {
+        g.fillStyle = 'rgba(255,255,255,0.9)';
+        g.beginPath(); g.arc(exx - 0.9, eyy - 2.3, 0.9, 0, Math.PI * 2); g.fill();
+        g.fillStyle = '#241433';
+      }
+    }
+  }
+
+  // rosy cheeks (warmer when happy or petted)
+  g.globalCompositeOperation = 'lighter';
+  const cheek = Math.min(0.98, 0.3 + pixie.joy * 0.4 + content * 0.5 + (pixie.blush || 0) * 0.6);
+  g.fillStyle = `hsla(345, 90%, 75%, ${cheek})`;
+  g.beginPath(); g.arc(-8.5, 3.5, 2.6 + content + (pixie.blush || 0) * 1.6, 0, Math.PI * 2); g.fill();
+  g.beginPath(); g.arc(8.5, 3.5, 2.6 + content + (pixie.blush || 0) * 1.6, 0, Math.PI * 2); g.fill();
+  g.globalCompositeOperation = 'source-over';
+
+  // ---- mouth: ONE shape that morphs continuously from a thin smile to an
+  // open laugh, so it can never pop between two states ----
+  const mx = lookX, my = 3.6 + lookY;
+  // tickling (shiver) opens her into a laugh, same as a big rush of joy
+  const open = Math.max(0, Math.min(1, Math.max((pixie.joy - 0.25) / 0.75, pixie.shiver))) * (1 - Math.min(1, sleepy * 1.4));
+  const wide = Math.max(open, content);
+  const w = 3.4 + wide * 1.9;               // half-width (smiles wider when content)
+  const curve = 2.0 + wide * 0.6;           // the smile's upward-cornered curve
+  const gap = 5.0 + open * 6.5;             // jaw opening (only ~half shows, so keep it generous)
+  const lip = () => {
+    g.beginPath();
+    g.moveTo(mx - w, my);
+    g.quadraticCurveTo(mx, my + curve + gap, mx + w, my);   // lower jaw
+    g.quadraticCurveTo(mx, my + curve, mx - w, my);          // upper lip (corners up)
+    g.closePath();
+  };
+  g.fillStyle = '#3a1f4d';
+  lip(); g.fill();
+  if (open > 0.12) {                        // tongue fades in as she opens up
+    g.save(); lip(); g.clip();
+    g.fillStyle = `hsla(348, 85%, 73%, ${Math.min(0.95, open)})`;
+    g.beginPath(); g.ellipse(mx, my + curve + gap * 0.78, w * 0.6, gap * 0.42, 0, 0, Math.PI * 2); g.fill();
+    g.restore();
+  }
+  g.restore();
+
+  // front wing pair drawn over body edges for depth
+  drawWingPair(px, py, hue, flutter, -1, pixie.wake);
+  g.globalCompositeOperation = 'source-over';
+
+  if (bondTier() >= 3) drawCrown(px, py, sleepy);   // a tiny crown at the deepest bond
+}
+
+function drawWingPair(px, py, hue, flutter, side, wakeAmt) {
+  g.globalCompositeOperation = 'lighter';
+  const fold = 0.45 + 0.55 * wakeAmt;       // wings tuck in as she sleeps
+  for (const dir of [-1, 1]) {
+    g.save();
+    g.translate(px, py);
+    // back pair sits slightly higher & wider
+    const baseAngle = dir * (0.5 + (side > 0 ? 0.25 : 0) + (1 - wakeAmt) * 0.25);
+    g.rotate(baseAngle + dir * 0.12 * Math.sin(pixie.flap));
+    const wingW = (22 + (side > 0 ? 6 : 0)) * (0.55 + 0.45 * flutter) * fold;
+    const wingH = (30 + (side > 0 ? 6 : 0)) * fold;
+    g.translate(dir * 6, -2);
+    g.scale(dir, 1);
+
+    const wg = g.createRadialGradient(wingW * 0.3, 0, 1, wingW * 0.5, 0, wingW);
+    wg.addColorStop(0, `hsla(${(hue + 60) % 360}, 100%, 90%, 0.40)`);
+    wg.addColorStop(0.6, `hsla(${(hue + 200) % 360}, 100%, 80%, 0.18)`);
+    wg.addColorStop(1, `hsla(${(hue + 120) % 360}, 100%, 75%, 0)`);
+    g.fillStyle = wg;
+    g.beginPath();
+    g.moveTo(0, 0);
+    g.bezierCurveTo(wingW * 0.4, -wingH * 0.55, wingW, -wingH * 0.35, wingW, 0);
+    g.bezierCurveTo(wingW, wingH * 0.45, wingW * 0.4, wingH * 0.5, 0, 0);
+    g.fill();
+
+    // faint vein shimmer
+    g.strokeStyle = `hsla(${(hue + 60) % 360}, 100%, 95%, 0.12)`;
+    g.lineWidth = 0.8;
+    g.beginPath(); g.moveTo(2, 0); g.quadraticCurveTo(wingW * 0.6, -2, wingW * 0.92, 0); g.stroke();
+    g.restore();
+  }
+}
+
+function frame() {
+  const t = now();
+  let dt = t - lastT; lastT = t;
+  if (dt > 0.05) dt = 0.05;   // clamp after tab-away
+  update(dt);
+  render();
+  requestAnimationFrame(frame);
+}
+
+/* ---------- Boot ------------------------------------------ */
+resize();
+cam.x = W / 2; cam.y = H / 2;
+pixie.x = pixie.tx = W / 2;
+pixie.y = pixie.ty = H / 2;
+pointer.x = pointer.prevX = W / 2; pointer.y = pointer.prevY = H / 2;
+pointer.glowX = W / 2; pointer.glowY = H / 2;
+pixie.hue = save.hue;                                    // she keeps her settled colour
+pixie.wake = welcomeBack > 0.3 ? 0.2 : 1;               // dozing if you've been gone a while
+pixie._wasAwake = pixie.wake > 0.5;
+seedAmbient();
+setTimeout(() => document.getElementById('hint').classList.add('show'), 600);
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
