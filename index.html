@@ -1933,11 +1933,22 @@ muteBtn.addEventListener('click', (e) => {
 /* rainbow pen toggle */
 const rainbowBtn = document.getElementById('rainbow');
 let rainbowMode = false;
+let rainbowTaps = [];                                 // secret knock: 3 quick taps coax out the golden pen
 rainbowBtn.addEventListener('click', (e) => {
   e.stopPropagation();
   rainbowMode = !rainbowMode;
   rainbowBtn.classList.toggle('on', rainbowMode);
   if (rainbowMode && goldenMode) { goldenMode = false; goldenBtn.classList.remove('on'); }
+
+  // a little easter egg — tap the rainbow three times in a breath and she offers the gold early
+  const tNow = now();
+  rainbowTaps = rainbowTaps.filter(t => tNow - t < 1.2);
+  rainbowTaps.push(tNow);
+  if (rainbowTaps.length >= 3 && !goldenShown) {
+    rainbowTaps = [];
+    goldenShown = true;
+    revealGolden();
+  }
   if (rainbowMode) {
     rainbowOnChime();
     // a happy ring of full-spectrum sparkles bursts out of Pixie
@@ -1954,7 +1965,7 @@ rainbowBtn.addEventListener('click', (e) => {
 /* golden rainbow — a gentle reward for time spent together *this visit*. It's never
    permanent: every session starts without it, and once you've played a few minutes
    (counting only time she's awake, so wandering off pauses the clock) it quietly appears. */
-const GOLDEN_SECONDS = 240;                          // ~4 minutes of awake play
+const GOLDEN_SECONDS = 180;                          // ~3 minutes of awake play
 const goldenBtn = document.getElementById('golden');
 let goldenMode = false;
 let sessionPlay = 0, goldenShown = false;
@@ -1973,7 +1984,7 @@ function revealGolden() {
   }
 }
 function checkGoldenUnlock(dt) {
-  if (goldenShown || !started || pixie.wake <= 0.5) return;   // only count time she's awake & with you
+  if (goldenShown || !started || pixie.wake <= 0.3) return;   // count drowsy-but-present too; only a real doze-off (0.1) pauses it
   sessionPlay += dt;
   if (sessionPlay >= GOLDEN_SECONDS) { goldenShown = true; revealGolden(); }
 }
