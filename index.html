@@ -3,9 +3,70 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-<title>Pixie</title>
+
+<title>Pixie — a calm, wordless toy of light and sound</title>
+<meta name="description" content="Pixie is a gentle little sprite who answers your touch with light and sound. No words, no scores, no rules — just a calm, glowing toy to play with and unwind. Free in your browser." />
+<link rel="canonical" href="https://tinypixie.com/" />
+<meta name="robots" content="index, follow, max-image-preview:large" />
+<meta name="author" content="Pixie" />
+
+<!-- Open Graph (Facebook, iMessage, Slack, WhatsApp, LinkedIn…) -->
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Pixie" />
+<meta property="og:title" content="Pixie — a calm, wordless toy of light and sound" />
+<meta property="og:description" content="A gentle little sprite who answers your touch with light and sound. No words, no scores — just a calm, glowing toy to play with and unwind." />
+<meta property="og:url" content="https://tinypixie.com/" />
+<meta property="og:image" content="https://tinypixie.com/og-image.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="Pixie, a glowing sprite drifting through a starry night sky." />
+<meta property="og:locale" content="en_US" />
+
+<!-- Twitter / X -->
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Pixie — a calm, wordless toy of light and sound" />
+<meta name="twitter:description" content="A gentle little sprite who answers your touch with light and sound. No words, no scores — just a calm, glowing toy to play with and unwind." />
+<meta name="twitter:image" content="https://tinypixie.com/og-image.png" />
+<meta name="twitter:image:alt" content="Pixie, a glowing sprite drifting through a starry night sky." />
+
+<!-- Structured data: tell search engines this is a free, browser-based game -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "VideoGame",
+      "@id": "https://tinypixie.com/#game",
+      "name": "Pixie",
+      "alternateName": "Tiny Pixie",
+      "url": "https://tinypixie.com/",
+      "description": "A gentle little sprite who answers your touch with light and sound. No words, no scores, no rules — just a calm, glowing ambient toy to play with and unwind.",
+      "image": "https://tinypixie.com/og-image.png",
+      "inLanguage": "en",
+      "genre": ["Ambient", "Relaxation", "Casual", "Toy"],
+      "keywords": "relaxing game, ambient toy, calming, wordless, sensory, fidget, light and sound, mindfulness, no words, browser game",
+      "playMode": "SinglePlayer",
+      "applicationCategory": "GameApplication",
+      "operatingSystem": "Any (modern web browser)",
+      "browserRequirements": "Requires JavaScript and HTML5 canvas",
+      "isAccessibleForFree": true,
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://tinypixie.com/#website",
+      "url": "https://tinypixie.com/",
+      "name": "Pixie",
+      "description": "A calm, wordless toy of light and sound — a little sprite who plays with your touch.",
+      "inLanguage": "en"
+    }
+  ]
+}
+</script>
+
 <meta name="theme-color" content="#0a0a1f" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Pixie" />
 <link rel="manifest" href="manifest.webmanifest" />
@@ -20,6 +81,20 @@
     cursor: none;
   }
   #stage { display: block; width: 100vw; height: 100vh; }
+
+  /* off-screen text for screen readers & search engines — never seen while playing */
+  .sr-only {
+    position: absolute; width: 1px; height: 1px;
+    padding: 0; margin: -1px; overflow: hidden;
+    clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+  }
+  /* readable fallback shown only when JavaScript is off */
+  .noscript {
+    position: fixed; inset: 0; display: grid; place-items: center;
+    padding: 8vw; text-align: center; color: #cdd6ff;
+    font: 400 clamp(15px,4.5vw,20px)/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  .noscript h1 { font-weight: 600; color: #fff; margin: 0 0 .4em; }
 
   /* a wordless, breathing invitation that fades after the first touch */
   #hint {
@@ -101,7 +176,18 @@
 </style>
 </head>
 <body>
+  <h1 class="sr-only">Pixie — a calm, wordless toy of light and sound</h1>
+
   <canvas id="stage"></canvas>
+
+  <noscript>
+    <div class="noscript">
+      <div>
+        <h1>Pixie</h1>
+        <p>A gentle little sprite who answers your touch with light and sound — no words, no scores, no rules, just a calm glowing toy to play with and unwind. Pixie needs JavaScript to come to life. Please enable it and reload.</p>
+      </div>
+    </div>
+  </noscript>
 
   <div id="hint"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
 

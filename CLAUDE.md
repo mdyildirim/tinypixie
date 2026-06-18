@@ -31,7 +31,7 @@ repo root, or local folders like `.claude/` get swept into the upload and served
 ```sh
 # Stage just the site files
 rm -rf /tmp/pixie-dist && mkdir -p /tmp/pixie-dist
-cp index.html icon.svg manifest.webmanifest sw.js /tmp/pixie-dist/
+cp index.html icon.svg og-image.png manifest.webmanifest sw.js robots.txt sitemap.xml /tmp/pixie-dist/
 
 # Deploy
 npx wrangler pages deploy /tmp/pixie-dist --project-name tinypixie --branch main

@@ -2,6 +2,8 @@
   "name": "Pixie",
   "short_name": "Pixie",
   "description": "A little sprite who only speaks in light and sound.",
+  "lang": "en",
+  "categories": ["games", "entertainment", "lifestyle"],
   "start_url": ".",
   "scope": ".",
   "display": "standalone",

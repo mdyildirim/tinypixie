@@ -1,0 +1,5 @@
+# Pixie — everyone's welcome to play and to index
+User-agent: *
+Allow: /
+
+Sitemap: https://tinypixie.com/sitemap.xml
