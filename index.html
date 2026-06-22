@@ -1345,19 +1345,25 @@ function classifyShape(pts, closed, cx, cy) {
   }
   return null;
 }
-// a heart has a notch at the very top (smaller y is up on the canvas)
+// a heart has a notch opposite its sharp tip: an inward radius dip flanked by two lobes.
+// measured relative to the tip (not the canvas), so it survives a tilted heart.
 function heartDip(pts, cx, cy) {
-  const rAt = ang => {
-    let best = 1e9, br = 0;
-    for (const p of pts) {
-      const a = Math.atan2(p.y - cy, p.x - cx);
-      let d = Math.abs(a - ang); if (d > Math.PI) d = 2 * Math.PI - d;
-      if (d < best) { best = d; br = Math.hypot(p.x - cx, p.y - cy); }
-    }
-    return br;
+  const rs = pts.map(p => ({ a: Math.atan2(p.y - cy, p.x - cx), r: Math.hypot(p.x - cx, p.y - cy) }));
+  const angGap = (a, b) => { const d = Math.abs(a - b); return d > Math.PI ? 2 * Math.PI - d : d; };
+  // deepest (min) or tallest (max) radius among points within a small angular window
+  const edge = (ang, win, wantMin) => {
+    let best = wantMin ? 1e9 : -1e9, got = false;
+    for (const s of rs) if (angGap(s.a, ang) < win) { if (wantMin ? s.r < best : s.r > best) best = s.r; got = true; }
+    return got ? best : null;
   };
-  const top = rAt(-Math.PI / 2), ul = rAt(-Math.PI / 2 - 0.9), ur = rAt(-Math.PI / 2 + 0.9);
-  return top < ul * 0.82 && top < ur * 0.82;
+  let tipA = 0, tr = -1;                              // the tip is the farthest point from centre
+  for (const s of rs) if (s.r > tr) { tr = s.r; tipA = s.a; }
+  const notch = tipA + Math.PI;                       // the dip sits straight across from the tip
+  const dip   = edge(notch, 0.5, true);               // deepest inward point at the top-centre
+  const lobeL = edge(notch - 0.95, 0.55, false);      // peak of one lobe
+  const lobeR = edge(notch + 0.95, 0.55, false);      // peak of the other
+  if (dip == null || lobeL == null || lobeR == null) return false;
+  return dip < lobeL * 0.85 && dip < lobeR * 0.85;    // a real notch, not just wobble
 }
 function bloomPortal(c) {
   ring(c.cx, c.cy, 40, 0, { speed: 150, hue: c.hue });
