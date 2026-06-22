@@ -160,7 +160,7 @@
 
   /* golden rainbow — a rare pen, earned over time; hidden until she offers it */
   #golden {
-    position: fixed; top: 112px; right: 16px; width: 40px; height: 40px;
+    position: fixed; top: 160px; right: 16px; width: 40px; height: 40px;
     border: none; border-radius: 50%; cursor: pointer;
     background: rgba(255,255,255,.06);
     backdrop-filter: blur(6px);
@@ -183,6 +183,24 @@
     25%  { opacity: 1; transform: scale(1.25); box-shadow: 0 0 26px 8px rgba(255,210,120,.85); }
     60%  { transform: scale(1); box-shadow: 0 0 18px 4px rgba(255,196,84,.5); }
     100% { box-shadow: 0 0 0 0 rgba(255,196,84,0); opacity: .55; }
+  }
+
+  /* magic tree toggle — summon the little tree, or tuck it away */
+  #tree {
+    position: fixed; top: 112px; right: 16px; width: 40px; height: 40px;
+    border: none; border-radius: 50%; cursor: pointer;
+    background: rgba(255,255,255,.06);
+    backdrop-filter: blur(6px);
+    display: grid; place-items: center;
+    opacity: .5; transition: opacity .25s, background .25s, box-shadow .25s;
+    z-index: 5;
+  }
+  #tree:hover { opacity: 1; background: rgba(255,255,255,.14); }
+  #tree svg { width: 22px; height: 22px; }
+  #tree.on {
+    opacity: 1;
+    background: rgba(120,210,140,.18);
+    box-shadow: 0 0 14px 2px rgba(110,220,140,.42);
   }
 
   /* a tiny, one-time note that Pixie keeps a little anonymous visit data */
@@ -263,6 +281,15 @@
     </svg>
   </button>
 
+  <button id="tree" aria-label="magic tree on/off" title="magic tree">
+    <svg viewBox="0 0 24 24">
+      <rect x="11" y="13" width="2" height="8" rx="1" fill="#9a6b45"/>
+      <circle cx="12" cy="8.6" r="4.2" fill="#5fce7c"/>
+      <circle cx="8.3" cy="10.8" r="3.1" fill="#4cbb6c"/>
+      <circle cx="15.7" cy="10.8" r="3.1" fill="#74da8c"/>
+    </svg>
+  </button>
+
   <!-- a tiny, one-time note about the little bit of data Pixie keeps -->
   <div id="privacy" role="dialog" aria-live="polite" aria-label="a little note about data" hidden>
     <span class="px-spark" aria-hidden="true">✨</span>
@@ -281,9 +308,16 @@ const STORE_KEY = 'pixie.save.v1';
 const save = { bond: 0, hue: 300, lastVisit: 0, lastGiftDay: '', plays: 0, stars: [] };
 try { Object.assign(save, JSON.parse(localStorage.getItem(STORE_KEY) || '{}')); } catch (e) {}
 
+// a little seed she tends: it grows one stage each day she waters it (kept forever).
+// never dies, never nags — just waits for the next day's sip of pixie dust.
+if (!save.tree) save.tree = { stage: 0, lastWater: '', planted: Date.now(), seed: (Math.random() * 1e9) | 0 };
+if (save.tree.seed == null) save.tree.seed = (Math.random() * 1e9) | 0;
+
 const awayMs = save.lastVisit ? Math.max(0, Date.now() - save.lastVisit) : 0;
 const todayStr = new Date().toISOString().slice(0, 10);
 let giftPending = save.lastGiftDay !== todayStr;     // a once-a-day little surprise
+let treeThirsty = save.tree.lastWater !== todayStr;  // she dusts it with magic once a day
+let treeShown = save.treeShown !== false;            // the tree toggle (button) — shown by default
 // how warmly she greets you, scaled by how long you were gone
 let welcomeBack = awayMs > 6 * 3600e3 ? 1 : awayMs > 30 * 60e3 ? 0.7 : awayMs > 3 * 60e3 ? 0.4 : 0;
 
@@ -699,6 +733,43 @@ function companionChime(pan = 0) {
   [79, 84, 88].forEach((n, i) =>
     voice(n, t + i * 0.07, 0.5, { wave: 'sine', vol: 0.028, send: 0.5, pan: pan + (i - 1) * 0.2 }));
 }
+/* a soft, growing shimmer when the little tree drinks its daily pixie dust */
+function treeChime(pan = 0) {
+  resumeAudio();
+  if (!ctx) return;
+  const t = ctx.currentTime + 0.02;
+  [60, 64, 67, 71, 74].forEach((n, i) =>
+    voice(n, t + i * 0.07, 0.5, { wave: 'sine', vol: 0.026, attack: 0.015, send: 0.5, pan: pan + (i / 5 - 0.4) * 0.3, detune: 3 }));
+  bell(83, t + 0.18, 0.035, 2.6); bell(88, t + 0.32, 0.025, 2.6);
+}
+/* The tree sings when you brush it. Its voice grows richer as the tree grows:
+   a young sprout offers a couple of soft notes; a full tree answers with a wide
+   arpeggio, octave shimmer and bell crown. `g01` is growth (0..1). */
+const TREE_SCALE = [60, 62, 64, 67, 69, 72, 74, 76, 79, 81, 84];   // C major pentatonic, a few octaves
+function treeChordEnter(stage, pan = 0) {
+  resumeAudio(); if (!ctx) return;
+  const g01 = Math.min(1, stage / MAX_STAGE);
+  const t0 = ctx.currentTime + 0.02;
+  const arp = [60, 64, 67, 72, 74, 79];               // root, 3rd, 5th, octave, 9th, 12th
+  const n = 2 + Math.round(g01 * 4);                   // 2..6 notes, more as it grows
+  for (let i = 0; i < n; i++)
+    voice(arp[i], t0 + i * 0.06, 0.7 + g01 * 0.8, {
+      wave: 'sine', vol: 0.02 + g01 * 0.012, attack: 0.02,
+      send: 0.4 + g01 * 0.3, pan: pan + (i / n - 0.5) * 0.3, detune: 3,
+    });
+  bell(84 + (g01 > 0.6 ? 7 : 0), t0 + 0.12, 0.028 + g01 * 0.02, 2.2 + g01 * 1.6);
+  if (g01 > 0.5) voice(86, t0 + 0.18, 1.2 + g01, { wave: 'triangle', vol: 0.012 + g01 * 0.008, send: 0.6, detune: 6, pan });
+}
+function treeShimmer(stage, pan = 0) {
+  resumeAudio(); if (!ctx) return;
+  const g01 = Math.min(1, stage / MAX_STAGE);
+  const t0 = ctx.currentTime + 0.01;
+  const span = 4 + Math.round(g01 * (TREE_SCALE.length - 4));   // wider note range as it grows
+  const note = TREE_SCALE[Math.floor(Math.random() * span)];
+  voice(note, t0, 0.4 + g01 * 0.5, { wave: 'sine', vol: 0.015 + g01 * 0.01, attack: 0.01, send: 0.45 + g01 * 0.3, pan, detune: 2 });
+  if (g01 > 0.35 && Math.random() < 0.6) voice(note + 4, t0 + 0.02, 0.4, { wave: 'sine', vol: 0.009, send: 0.5, pan });   // harmony
+  if (g01 > 0.7 && Math.random() < 0.35) bell(note + 12, t0 + 0.03, 0.018, 1.6);                                          // high sparkle
+}
 
 /* ---------- Canvas / render setup ------------------------- */
 const canvas = document.getElementById('stage');
@@ -998,6 +1069,238 @@ function drawConstellation(tNow) {
     drawSparkle(s.x, s.y, s.r, s.hue, 70, tw * 0.7, false);
   }
   g.globalCompositeOperation = 'source-over';
+}
+
+/* ---------- A little tree Pixie waters with magic each day ----
+   A seed that grows one stage every day she dusts it. It never
+   dies or nags: when it's had its daily sip it wears a warm,
+   content crown; when a new day finds it thirsty, a soft blue
+   droplet hovers over it and the leaves dim and droop a touch
+   until she drifts by to tend it. Drawn in screen space, rooted
+   to the bottom-left edge so it reads as scenery, not a control. */
+const MAX_STAGE = 8;
+function stageGrowth() {
+  const s = save.tree ? save.tree.stage : 0;
+  return Math.min(1, 0.06 + 0.94 * (s / MAX_STAGE));   // a floor so stage 0 still shows a sprout
+}
+const tree = {
+  grow: stageGrowth(),                 // animated 0..1, eases toward the saved stage
+  sip: treeThirsty ? 0 : 1,            // 1 freshly watered (content) .. 0 thirsty
+  show: treeShown ? 1 : 0,             // 0 tucked away .. 1 fully present (toggled by the button)
+  hoverGlow: 0,                        // brightens while you brush over it
+  state: 'idle',                       // idle | flyTo | pour | return
+  busy: false,                         // true while she's away tending it
+  errandT: 6,
+  branches: null, leaves: null,
+};
+let treeHovering = false, lastTreeNote = 0;   // hover-to-sing state
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+let _leafSpr = null;
+// a deep, saturated green so that heavy additive overlap in the canopy core
+// stays green instead of accumulating R/B channels into a pale wash-out
+const leafSprite = () => _leafSpr || (_leafSpr = bakeRadial(64,
+  [[0, 'hsla(128,92%,48%,1)'], [0.5, 'hsla(125,88%,40%,0.5)'], [1, 'hsla(125,88%,40%,0)']]));
+
+// grow the branch/leaf skeleton once, deterministically from the saved seed
+function buildTree() {
+  const rng = mulberry32(save.tree.seed || 1234);
+  const branches = [], leaves = [];
+  (function grow(x, y, ang, len, w, depth, appear) {
+    if (depth > 4 || len < 0.05) {
+      leaves.push({ x, y, r: 0.05 + rng() * 0.045, ph: rng() * 6.28, appearAt: Math.min(0.97, appear), hue: 95 + rng() * 50 });
+      return;
+    }
+    const x2 = x + Math.cos(ang) * len, y2 = y + Math.sin(ang) * len;
+    branches.push({ x1: x, y1: y, x2, y2, w, appearAt: Math.min(0.9, appear) });
+    if (depth === 0 || depth >= 2)
+      leaves.push({ x: x2, y: y2, r: 0.04 + rng() * 0.04, ph: rng() * 6.28, appearAt: depth === 0 ? 0.05 : Math.min(0.95, appear + 0.04), hue: 95 + rng() * 50 });
+    const nb = depth === 0 ? 2 : (rng() < 0.4 ? 3 : 2);
+    for (let i = 0; i < nb; i++) {
+      const na = ang + (rng() - 0.5) * (depth === 0 ? 0.55 : 0.95);
+      grow(x2, y2, na, len * (0.62 + rng() * 0.16), w * 0.62, depth + 1, appear + 0.13 + rng() * 0.05);
+    }
+  })(0, 0, -Math.PI / 2, 0.4, 0.07, 0, 0);
+  tree.branches = branches; tree.leaves = leaves;
+}
+function ensureTree() { if (!tree.branches) buildTree(); }
+
+// where the tree sits on screen, and where its canopy is (it grows upward)
+function treeGeom() {
+  const baseX = Math.round(Math.max(56, Math.min(W * 0.16, 150)));
+  const baseY = H + 6;                                  // root tucked just past the bottom edge
+  const maxH = Math.min(H * 0.46, 320);
+  const size = (0.12 + 0.88 * tree.grow) * maxH;
+  return { baseX, baseY, size, canopyX: baseX, canopyY: baseY - size * 0.62 };
+}
+function canopyWorld() { const t = treeGeom(); return screenToWorld(t.canopyX, t.canopyY); }
+// stereo pan toward where the tree sits, and a screen-space hit-test over its canopy
+function treePan() { const t = treeGeom(); return Math.max(-1, Math.min(1, (t.canopyX - W / 2) / (W / 2))); }
+function treeHoverTest(sx, sy) {
+  if (!treeShown) return false;
+  const t = treeGeom();
+  const dx = (sx - t.canopyX) / (t.size * 0.55 + 28);
+  const dy = (sy - t.canopyY) / (t.size * 0.5 + 28);
+  return dx * dx + dy * dy < 1;
+}
+function easeOutBack(x) { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); }
+
+function emitWaterDust(c, dt) {
+  // she sprinkles glittering dust that drifts down onto the canopy
+  if (Math.random() < dt * 42) {
+    spawn(pixie.x + (Math.random() - 0.5) * 16, pixie.y + 8, {
+      vx: (Math.random() - 0.5) * 12 + (c.x - pixie.x) * 0.35,
+      vy: 28 + Math.random() * 34,
+      hue: 90 + Math.random() * 60, sat: 85,
+      size: 1.6 + Math.random() * 2.2, life: 0.9 + Math.random() * 0.6,
+      glint: Math.random() < 0.5, grav: 24,
+    });
+  }
+}
+function finishWatering() {
+  treeThirsty = false;
+  save.tree.lastWater = todayStr;
+  const grew = save.tree.stage < MAX_STAGE;
+  if (grew) save.tree.stage++;
+  persist();
+  pixie.joy = 1; pixie.squash = 1.4; mood = Math.min(1, mood + 0.22); save.bond += 3;
+  auroraFlash = Math.max(auroraFlash, 0.35);
+  const c = canopyWorld();
+  treeChime(panOf(c.x));
+  ring(c.x, c.y, grew ? 22 : 14, 6, { speed: grew ? 95 : 60, hue: 115 });
+  burst(c.x, c.y, 16, { speed: 70, hue: 120, sat: 70, grav: -18 });
+}
+
+function updateTree(dt) {
+  ensureTree();
+  // animated growth eases toward the saved stage; sip eases toward content/thirsty
+  tree.grow += (stageGrowth() - tree.grow) * Math.min(1, dt * 1.1);
+  tree.sip += ((treeThirsty ? 0 : 1) - tree.sip) * Math.min(1, dt * 0.7);
+  tree.show += ((treeShown ? 1 : 0) - tree.show) * Math.min(1, dt * 4);   // bloom in / tuck away
+  tree.hoverGlow = Math.max(0, tree.hoverGlow - dt * 2.5);                // brushed-leaf glow fades
+  if (!started || !treeShown) { tree.busy = false; return; }   // a hidden tree isn't tended
+
+  switch (tree.state) {
+    case 'idle':
+      if (treeThirsty) {
+        tree.errandT -= dt;
+        const free = pixie.wake > 0.6 && !stroke && !pixie.trace && !pixie.flyingTo && petLevel < 0.2;
+        if (tree.errandT <= 0 && free) tree.state = 'flyTo';
+      }
+      break;
+    case 'flyTo': {
+      const c = canopyWorld();
+      pixie.flyingTo = { x: c.x, y: c.y - 34 };
+      if (Math.hypot(pixie.x - c.x, pixie.y - (c.y - 34)) < 36) { tree.state = 'pour'; tree.errandT = 2.4; }
+      break;
+    }
+    case 'pour': {
+      const c = canopyWorld();
+      pixie.flyingTo = { x: c.x + Math.sin(now() * 3) * 12, y: c.y - 34 };
+      if (Math.hypot(pixie.x - c.x, pixie.y - c.y) < 70) {   // only while she's actually over it
+        emitWaterDust(c, dt);
+        tree.errandT -= dt;
+      }
+      if (tree.errandT <= 0) { finishWatering(); tree.state = 'return'; tree.errandT = 1.4; }
+      break;
+    }
+    case 'return':
+      pixie.flyingTo = null;
+      tree.errandT -= dt;
+      if (tree.errandT <= 0) tree.state = 'idle';
+      break;
+  }
+  tree.busy = tree.state === 'flyTo' || tree.state === 'pour';
+
+  // ambient life: happy motes rise from a content canopy
+  if (tree.sip > 0.45 && Math.random() < dt * (1.5 + tree.sip * 4)) {
+    const t = treeGeom(), c = screenToWorld(t.canopyX, t.canopyY);
+    spawn(c.x + (Math.random() - 0.5) * t.size * 0.5, c.y + (Math.random() - 0.5) * t.size * 0.32, {
+      vx: (Math.random() - 0.5) * 8, vy: -10 - Math.random() * 14,
+      hue: 100 + Math.random() * 55, sat: 70,
+      size: 1.3 + Math.random() * 1.8, life: 1.2 + Math.random(),
+      glint: Math.random() < 0.4, grav: -5,
+    });
+  }
+}
+
+// a soft teardrop outline — the wordless "I'm thirsty" cue
+function drawDroplet(x, y, r) {
+  g.beginPath();
+  g.moveTo(x, y - r * 1.4);
+  g.bezierCurveTo(x + r, y - r * 0.2, x + r, y + r * 0.7, x, y + r);
+  g.bezierCurveTo(x - r, y + r * 0.7, x - r, y - r * 0.2, x, y - r * 1.4);
+  g.closePath();
+}
+
+function drawTree(tNow) {
+  ensureTree();
+  if (tree.show < 0.01) return;                              // fully tucked away by the button
+  g.save();
+  const t = treeGeom();
+  if (tree.show < 0.999) t.size *= Math.max(0, easeOutBack(tree.show));   // a magical pop as it appears
+  const sip = tree.sip, thirst = 1 - sip;
+  const sway = Math.sin(tNow * 0.6) * 0.04 + Math.sin(tNow * 0.27) * 0.02;
+  const droop = thirst * 0.12;
+  const ax = (lx, ly) => t.baseX + (lx + sway * -ly) * t.size;   // local -> screen x (sways more up high)
+  const ay = (ly) => t.baseY + (ly * (1 - droop)) * t.size;      // local -> screen y (sags when thirsty)
+
+  // trunk & branches (a dark, glowing-bark silhouette)
+  g.lineCap = 'round';
+  g.strokeStyle = `hsl(288, ${16 + sip * 12}%, ${15 + sip * 7}%)`;
+  for (const br of tree.branches) {
+    if (tree.grow <= br.appearAt) continue;
+    const a = Math.min(1, (tree.grow - br.appearAt) / 0.1);
+    const ex = br.x1 + (br.x2 - br.x1) * a, ey = br.y1 + (br.y2 - br.y1) * a;
+    g.lineWidth = Math.max(1, br.w * t.size);
+    g.beginPath(); g.moveTo(ax(br.x1, br.y1), ay(br.y1)); g.lineTo(ax(ex, ey), ay(ey)); g.stroke();
+  }
+
+  // glowing leaf clusters
+  g.globalCompositeOperation = 'lighter';
+  for (const lf of tree.leaves) {
+    if (tree.grow <= lf.appearAt) continue;
+    const a = Math.min(1, (tree.grow - lf.appearAt) / 0.08);
+    const lx = ax(lf.x, lf.y), ly = ay(lf.y);
+    const breath = 0.85 + 0.15 * Math.sin(tNow * 1.2 + lf.ph);
+    const r = lf.r * t.size * a * (0.7 + 0.3 * sip);
+    // additive glows stack, so keep per-leaf alpha low; content reads as a ~2x
+    // lift in brightness rather than a wash-out to white
+    const al = (0.12 + 0.14 * sip + 0.14 * tree.hoverGlow) * breath * a;
+    g.globalAlpha = al;
+    g.drawImage(leafSprite(), lx - r * 1.7, ly - r * 1.7, r * 3.4, r * 3.4);
+    g.globalAlpha = al * (0.5 + 0.5 * sip);
+    g.fillStyle = `hsl(${lf.hue}, ${70 + sip * 20}%, ${42 + sip * 12}%)`;
+    g.beginPath(); g.arc(lx, ly, r * 0.5, 0, 6.283); g.fill();
+  }
+  g.globalAlpha = 1;
+
+  // the daily cue hovering just above the canopy: thirsty droplet <-> content crown
+  const cueX = t.canopyX, cueY = t.canopyY - t.size * 0.1 - 16;
+  if (thirst > 0.03) {                       // thirsty: a soft pulsing blue droplet
+    const pulse = 0.5 + 0.5 * Math.sin(tNow * 2.6);
+    g.globalCompositeOperation = 'lighter';
+    g.globalAlpha = thirst * (0.35 + 0.45 * pulse);
+    const gr = 9 + pulse * 3;
+    g.drawImage(glowSprite(), cueX - gr * 1.5, cueY - gr * 1.5, gr * 3, gr * 3);
+    g.globalCompositeOperation = 'source-over';
+    g.globalAlpha = thirst * (0.55 + 0.4 * pulse);
+    g.strokeStyle = 'rgba(170,210,255,0.95)'; g.lineWidth = 1.6;
+    drawDroplet(cueX, cueY, 5 + pulse); g.stroke();
+  }
+  if (sip > 0.03) {                          // content: a warm, twinkling crown
+    const tw = 0.55 + 0.45 * Math.sin(tNow * 1.6);
+    g.globalCompositeOperation = 'lighter';
+    drawStarShape(cueX, cueY, 6 + tw * 3, 48, sip * (0.5 + 0.5 * tw), tNow * 0.3);
+  }
+  g.globalAlpha = 1;
+  g.restore();
 }
 
 /* ---------- Shooting stars (tap to catch) ----------------- */
@@ -1605,6 +1908,8 @@ function wake() {
     setTimeout(() => { for (let i = 0; i < 3; i++) spawnTreat(pixie.x + (Math.random() - 0.5) * 120, pixie.y + 40 + Math.random() * 40); }, 600);
     persist();
   }
+  // she'll drift over to dust the little tree with magic in a calm moment
+  if (treeThirsty) tree.errandT = 5 + Math.random() * 3;
 }
 
 /* nudge her awake if she was dozing; counts as an interaction either way */
@@ -1687,6 +1992,18 @@ function onMove(e) {
   pointer.prevX = p.x; pointer.prevY = p.y;
   lastInteract = now();
   if (speed > 3) rouse();
+
+  // ---- brush the little tree and it sings (richer the more it has grown) ----
+  if (treeShown && treeHoverTest(s.x, s.y)) {
+    const tn = now();
+    if (!treeHovering) { treeHovering = true; treeChordEnter(save.tree.stage, treePan()); }
+    tree.hoverGlow = Math.min(1, tree.hoverGlow + 0.3);
+    if (tn - lastTreeNote > 0.12 && speed > 0.4) { lastTreeNote = tn; treeShimmer(save.tree.stage, treePan()); }
+    spawn(p.x, p.y, { vx: (Math.random() - 0.5) * 22, vy: -8 - Math.random() * 18, hue: 100 + Math.random() * 55, sat: 80, size: 1.4 + Math.random() * 1.8, life: 0.6 + Math.random() * 0.5, glint: Math.random() < 0.5, grav: -6 });
+    return;                                     // brushing the tree is its own gentle interaction
+  }
+  treeHovering = false;
+
   const t = now();
 
   // ---- magical pen: extend the current stroke ----
@@ -2156,6 +2473,30 @@ goldenBtn.addEventListener('click', (e) => {
   }
 });
 
+/* magic tree toggle — summon the little tree into being, or tuck it away.
+   Growth is kept either way; the button only controls whether it's present. */
+const treeBtn = document.getElementById('tree');
+treeBtn.classList.toggle('on', treeShown);
+function setTreeShown(on, fx) {
+  treeShown = on; save.treeShown = on; persist();
+  treeBtn.classList.toggle('on', on);
+  ensureTree();
+  if (!on && tree.busy) { pixie.flyingTo = null; tree.busy = false; tree.state = 'idle'; }
+  if (!fx) return;
+  const c = canopyWorld();
+  if (on) {                                        // it appears on its spot in a shower of magic
+    treeChordEnter(save.tree.stage, treePan());
+    ring(c.x, c.y, 26, 8, { speed: 95, hue: 115 });
+    burst(c.x, c.y, 22, { speed: 80, hue: 120, sat: 82, grav: -14 });
+    auroraFlash = Math.max(auroraFlash, 0.3);
+    mood = Math.min(1, mood + 0.12); pixie.joy = Math.min(1, pixie.joy + 0.3);
+  } else {                                         // a soft poof as it tucks away
+    popChime(treePan());
+    burst(c.x, c.y, 14, { speed: 55, hue: 120, sat: 55, grav: 8 });
+  }
+}
+treeBtn.addEventListener('click', (e) => { e.stopPropagation(); ensureAudio(); resumeAudio(); setTreeShown(!treeShown, true); });
+
 /* ---------- Loop ------------------------------------------ */
 let auroraFlash = 0;
 let lastT = now();
@@ -2208,8 +2549,11 @@ function update(dt) {
   if (castHead) traceWant = castHead;
   pixie.trace = traceWant;
 
+  // ---- the little tree she tends: schedule & run the once-a-day watering errand ----
+  updateTree(dt);
+
   // ---- treats you set out: she drifts over to nibble the nearest ----
-  if (!pixie.trace && treats.length) {
+  if (!pixie.trace && !tree.busy && treats.length) {
     let best = null, bd = 1e9;
     for (const tr of treats) { if (tr.held) continue; const d = Math.hypot(tr.x - pixie.x, tr.y - pixie.y); if (d < bd) { bd = d; best = tr; } }
     if (best) pixie.flyingTo = { x: best.x, y: best.y };
@@ -2245,8 +2589,8 @@ function update(dt) {
   // gentle idle bob
   pixie.y += Math.sin(tNow * 1.6) * 6 * dt;
 
-  // arrive at a chased star -> twinkle and release
-  if (pixie.flyingTo) {
+  // arrive at a chased star -> twinkle and release (the tree errand has its own arrival)
+  if (pixie.flyingTo && !tree.busy) {
     const d = Math.hypot(pixie.flyingTo.x - pixie.x, pixie.flyingTo.y - pixie.y);
     if (d < 26) {
       burst(pixie.x, pixie.y, 18, { speed: 110, sat: 80, grav: -12 });
@@ -2372,6 +2716,9 @@ function render() {
   drawAmbient(sky.star);
   drawShooters();
   drawBubbles();
+
+  // ---- the little tree she tends, rooted to the bottom edge (screen space) ----
+  drawTree(tNow);
 
   // ---- everything below lives in the zoomable "world" ----
   g.save();

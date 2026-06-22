@@ -13,6 +13,27 @@ wordless, gentle, no scores, no guilt — delights that reward time spent togeth
 
 ## Done / shipped
 
+- **A magical tree she waters each day** (this version): a seed rooted at the
+  bottom-left edge that grows one stage every real day (`save.tree.stage`,
+  `MAX_STAGE` = 8). It never dies or nags. When a new day finds it thirsty
+  (`treeThirsty`, gated on `save.tree.lastWater !== todayStr` like the daily
+  gift), a soft blue droplet hovers over a dimmed, drooping canopy. In a calm
+  moment Pixie drifts over and sprinkles falling pixie dust onto it
+  (`updateTree` errand state machine: `idle → flyTo → pour → return`); the tree
+  drinks, grows a notch, and the droplet gives way to a warm twinkling crown
+  over a brighter, lusher canopy with happy motes rising — the wordless "all
+  tended" feedback. The branch/leaf skeleton is grown once, deterministically
+  from a saved seed (`buildTree`, `mulberry32`); drawn in screen space so it
+  reads as scenery. See `drawTree` / `updateTree` / `finishWatering` /
+  `treeChime`. It's a **toggle button** like the pens (`#tree`, persisted as
+  `save.treeShown`): clicking summons it onto its spot in a shower of magic
+  (`setTreeShown` + `tree.show` eased through `easeOutBack` for a pop) or tucks
+  it away with a soft poof. **Brushing the canopy makes it sing** — a wind-chime
+  voice that grows richer with the tree: a sprout offers a couple of soft notes,
+  a full tree a wide arpeggio with octave shimmer and a bell crown
+  (`treeChordEnter` / `treeShimmer`, scaled by stage; hover via `treeHoverTest`
+  in `onMove`, with `tree.hoverGlow` brightening the leaves).
+
 - **Draw-an-arc → a rainbow in the sky** (this version): draw a wide upward arch
   and the gesture is recognised (`classifyShape` → `'arc'`) and bloomed into a
   full rainbow that fans out concentrically from the line you drew, painting on
