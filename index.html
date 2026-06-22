@@ -72,6 +72,17 @@
 <link rel="manifest" href="manifest.webmanifest" />
 <link rel="icon" href="icon.svg" />
 <link rel="apple-touch-icon" href="icon.svg" />
+
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-2E6N1RW8ZP"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-2E6N1RW8ZP');
+</script>
+
 <style>
   :root { color-scheme: dark; }
   html, body {
@@ -173,6 +184,46 @@
     60%  { transform: scale(1); box-shadow: 0 0 18px 4px rgba(255,196,84,.5); }
     100% { box-shadow: 0 0 0 0 rgba(255,196,84,0); opacity: .55; }
   }
+
+  /* a tiny, one-time note that Pixie keeps a little anonymous visit data */
+  #privacy {
+    position: fixed; left: 50%;
+    bottom: max(18px, env(safe-area-inset-bottom, 18px));
+    transform: translate(-50%, 16px);
+    display: flex; align-items: center; gap: 12px;
+    max-width: min(92vw, 430px);
+    padding: 11px 13px 11px 15px;
+    border-radius: 20px;
+    background: rgba(20,22,48,.6);
+    border: 1px solid rgba(160,190,255,.18);
+    box-shadow: 0 8px 30px rgba(0,0,0,.35), 0 0 24px rgba(130,160,255,.12);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    color: #cdd6ff;
+    font: 400 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    opacity: 0; transition: opacity .6s ease, transform .6s ease;
+    z-index: 6; pointer-events: none;
+  }
+  #privacy.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+  #privacy .px-spark {
+    flex: none; font-size: 18px; line-height: 1;
+    filter: drop-shadow(0 0 6px rgba(180,210,255,.7));
+    animation: pulse 1.8s ease-in-out infinite;   /* same breathing as the hint dots */
+  }
+  #privacy p { margin: 0; flex: 1 1 auto; min-width: 0; }
+  #privacy button {
+    flex: none; cursor: pointer;
+    padding: 7px 15px; border: none; border-radius: 13px;
+    background: rgba(180,205,255,.16);
+    color: #eaf0ff; font: inherit; font-weight: 600;
+    transition: background .25s, box-shadow .25s;
+  }
+  #privacy button:hover {
+    background: rgba(180,205,255,.28);
+    box-shadow: 0 0 12px rgba(150,180,255,.35);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #privacy .px-spark { animation: none; }
+  }
 </style>
 </head>
 <body>
@@ -211,6 +262,13 @@
       <circle cx="12" cy="5.4" r="1.5" fill="#fff3c4"/>
     </svg>
   </button>
+
+  <!-- a tiny, one-time note about the little bit of data Pixie keeps -->
+  <div id="privacy" role="dialog" aria-live="polite" aria-label="a little note about data" hidden>
+    <span class="px-spark" aria-hidden="true">✨</span>
+    <p>Pixie keeps a little anonymous visit data to see what folks enjoy — no accounts, no ads.</p>
+    <button id="privacyOk" type="button">okay</button>
+  </div>
 
 <script>
 /* ============================================================
@@ -2525,7 +2583,26 @@ pixie.hue = save.hue;                                    // she keeps her settle
 pixie.wake = welcomeBack > 0.3 ? 0.2 : 1;               // dozing if you've been gone a while
 pixie._wasAwake = pixie.wake > 0.5;
 seedAmbient();
-setTimeout(() => document.getElementById('hint').classList.add('show'), 600);
+// the breathing invitation — held back until the first-time data note is acknowledged
+const showHint = () => setTimeout(() => document.getElementById('hint').classList.add('show'), 600);
+
+// a gentle, one-time note that Pixie keeps a little anonymous visit data
+(function privacyNote() {
+  const KEY = 'pixie.consent.v1';
+  let acked = false;
+  try { acked = localStorage.getItem(KEY) === '1'; } catch (e) {}
+  if (acked) { showHint(); return; }                       // already greeted — straight to play
+
+  const el = document.getElementById('privacy');
+  el.hidden = false;
+  requestAnimationFrame(() => el.classList.add('show'));    // fade + drift in
+  document.getElementById('privacyOk').addEventListener('click', () => {
+    el.classList.remove('show');
+    try { localStorage.setItem(KEY, '1'); } catch (e) {}
+    setTimeout(() => { el.hidden = true; }, 600);           // remove once it has faded
+    showHint();                                             // now invite the first touch
+  }, { once: true });
+})();
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 }
