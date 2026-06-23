@@ -25,14 +25,26 @@ wordless, gentle, no scores, no guilt — delights that reward time spent togeth
   tended" feedback. The branch/leaf skeleton is grown once, deterministically
   from a saved seed (`buildTree`, `mulberry32`); drawn in screen space so it
   reads as scenery. See `drawTree` / `updateTree` / `finishWatering` /
-  `treeChime`. It's a **toggle button** like the pens (`#tree`, persisted as
-  `save.treeShown`): clicking summons it onto its spot in a shower of magic
-  (`setTreeShown` + `tree.show` eased through `easeOutBack` for a pop) or tucks
-  it away with a soft poof. **Brushing the canopy makes it sing** — a wind-chime
+  `treeChime`. The **`#tree` button** is *plant-then-dim*: a brand-new visitor
+  sees only the button, and the **first tap plants** the tree — it blooms into
+  being in a shower of magic (`plantTree`, `save.treePlanted`, `tree.show` eased
+  through `easeOutBack` for a pop). After that it grows forever **regardless of
+  the toggle**; the button only sets prominence (`save.treeShown` → `tree.prom`):
+  full green & glowing, or a calm, faded little tree when "off" (`TREE_DIM` = 0.2,
+  same natural green just low-opacity with the magical glow + cue dropped via
+  `glowFactor` — not a desaturated ghost) — still tended and growing in the
+  background. **Brushing the canopy makes it sing** — a wind-chime
   voice that grows richer with the tree: a sprout offers a couple of soft notes,
   a full tree a wide arpeggio with octave shimmer and a bell crown
   (`treeChordEnter` / `treeShimmer`, scaled by stage; hover via `treeHoverTest`
-  in `onMove`, with `tree.hoverGlow` brightening the leaves).
+  in `onMove`, with `tree.hoverGlow` brightening the leaves). The watering is
+  now **tappable & legible**: the leaves have a solid green base + brown trunk
+  (so it reads as a real tree in daylight, not just additive glow that washed
+  out against a bright sky), and the thirsty cue is a solid blue droplet
+  floating clearly above the foliage. Tap the droplet/canopy and Pixie flies
+  straight over to water it (`callPixieToWater`, hit-tested via the stored
+  `tree.cueX/cueY/cueR`); if you ignore it for ~30s she tends it herself
+  (slow auto fallback in `wake`).
 
 - **Draw-an-arc → a rainbow in the sky** (this version): draw a wide upward arch
   and the gesture is recognised (`classifyShape` → `'arc'`) and bloomed into a
