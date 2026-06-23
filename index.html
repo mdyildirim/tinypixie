@@ -362,6 +362,9 @@ let welcomeBack = awayMs > 6 * 3600e3 ? 1 : awayMs > 30 * 60e3 ? 0.7 : awayMs > 
 // bond unlocks her growth: brighter glow, an extra wing pair, then a tiny crown.
 // thresholds are tuned so growth shows over several real play sessions, not minutes
 function bondTier() { const b = save.bond; return b > 600 ? 3 : b > 220 ? 2 : b > 60 ? 1 : 0; }
+// the tier she's at when this visit begins — so we only celebrate crossings that
+// happen *while you're here to see them*, never replaying past milestones on load.
+let lastTier = bondTier();
 
 let lastPersist = 0;
 function persist() {
@@ -718,6 +721,20 @@ function welcomeChime(mag = 1) {
     voice(n, t + i * 0.08, 0.6, { wave: 'sine', vol: 0.03 + 0.02 * mag, attack: 0.02, send: 0.45, pan: -0.3 + i * 0.15 }));
   bell(84, t + 0.1, 0.04 + 0.03 * mag);
   if (mag > 0.6) { bell(91, t + 0.34, 0.035); voice(96, t + 0.5, 0.7, { wave: 'sine', vol: 0.03, send: 0.5 }); }
+}
+/* a blossoming "you've grown" bloom when your bond deepens a tier — bigger each step.
+   not a ping but an *arrival*: a petalled climb over a slow swelling pad, crowned by bells. */
+function tierChime(tier = 1) {
+  resumeAudio();
+  const t = ctx.currentTime + 0.04;
+  // a major-pentatonic climb opening upward like petals
+  [60, 64, 67, 72, 76, 79, 84].forEach((n, i) =>
+    voice(n, t + i * 0.075, 0.7, { wave: 'sine', vol: 0.03, attack: 0.02, send: 0.5, pan: -0.4 + i * 0.13, detune: 4 }));
+  // a warm pad swells underneath so it lands like an arrival, not a sparkle
+  [48, 55, 60].forEach((n, j) =>
+    voice(n, t + 0.1, 1.9, { wave: 'sine', vol: 0.02, attack: 0.45, hold: 0.3, send: 0.5, detune: 5, pan: (j - 1) * 0.3 }));
+  // struck bells crown the top, one more for each tier deeper
+  for (let i = 0; i <= tier; i++) bell(88 + i * 5, t + 0.34 + i * 0.13, 0.045);
 }
 /* a soft "blup" + happy sparkle when she nibbles a treat */
 function feedChime(pan = 0) {
@@ -1924,10 +1941,12 @@ function pollMic(tNow) {
 }
 
 /* a tiny crown she earns at the deepest bond */
-function drawCrown(px, py, sleepy) {
+function drawCrown(px, py, sleepy, scale = 1) {
+  if (scale <= 0) return;
   g.save();
   g.translate(px, py - 16);
   g.rotate(pixie.lean * 0.12 + sleepy * 0.16);
+  if (scale !== 1) g.scale(scale, scale);   // grows in on the tier it's earned
   g.globalCompositeOperation = 'lighter';
   g.fillStyle = 'hsla(48, 100%, 70%, 0.95)';
   const w = 11, base = -2;
@@ -2066,6 +2085,29 @@ function rouse() {
     mood = Math.min(1, mood + 0.2);
   }
   lastInteract = now();
+}
+
+/* a witnessed moment when bond crosses into a new tier. her quiet growth — brighter
+   glow, then an extra wing pair, then a tiny crown — used to just pop in unnoticed;
+   here she blossoms so you actually *see* the bond deepen, and the new gift shimmers
+   into being amid a bloom of her own light. no words, no number — just light & sound. */
+function celebrateTier(tier) {
+  tierChime(tier);
+  pixie.joy = 1; pixie.squash = 1.6; pixie.wake = 1; pixie._wasAwake = true;
+  pixie.loop = 0.85;                    // a happy little spin
+  pixie.tierGlow = 1;                   // halo blooms, then settles over a few seconds
+  if (tier >= 2) pixie.wingReveal = 1;  // the gift this tier brings grows in, not pops
+  if (tier >= 3) pixie.crownReveal = 1;
+  mood = Math.min(1, mood + 0.4);
+  auroraFlash = Math.max(auroraFlash, 0.95);
+  // a slow blossoming of light around her, in her own colour
+  ring(pixie.x, pixie.y, 18 + tier * 6, 0, { speed: 110, hue: pixie.hue });
+  burst(pixie.x, pixie.y, 26 + tier * 10, { speed: 90, sat: 85, grav: -16, hue: pixie.hue });
+  // a keepsake star (or two, or three) rises into her constellation to mark the milestone
+  setTimeout(() => {
+    for (let i = 0; i <= tier; i++)
+      addConstellationStar(pixie.x + (Math.random() - 0.5) * 200, pixie.y - 90 - Math.random() * 90, pixie.hue);
+  }, 420);
 }
 
 function onDown(e) {
@@ -2738,6 +2780,8 @@ function update(dt) {
   // ---- she remembers you: bond grows mostly while you actively play ----
   // (idling barely moves it; delighting her — feeding, drawing, catching — adds chunks)
   save.bond += dt * (0.02 + mood * 0.28 + (pointer.active ? 0.12 : 0));
+  const tierNow = bondTier();
+  if (tierNow > lastTier) { lastTier = tierNow; celebrateTier(tierNow); }   // she blossoms when the bond deepens
   if (tNow - lastPersist > 5) { lastPersist = tNow; persist(); }
   checkGoldenUnlock(dt);   // after a few minutes of awake play this session, the golden pen appears
 
@@ -2753,6 +2797,10 @@ function update(dt) {
   // ---- decays for the new expressions ----
   pixie.blush = Math.max(0, (pixie.blush || 0) - dt * 0.5);
   pixie.fed = Math.max(0, (pixie.fed || 0) - dt * 0.6);
+  // tier-up afterglow + the slow "grow in" of whatever new gift the tier brought
+  pixie.tierGlow = Math.max(0, (pixie.tierGlow || 0) - dt * 0.33);    // ~3s halo bloom
+  pixie.wingReveal = Math.max(0, (pixie.wingReveal || 0) - dt * 0.4); // ~2.5s wing unfurl
+  pixie.crownReveal = Math.max(0, (pixie.crownReveal || 0) - dt * 0.4);
   if (pixie.loop > 0) { pixie.loop -= dt * 1.4; pixie.spin = (pixie.spin || 0) + dt * 16; if (pixie.loop <= 0) { pixie.loop = 0; pixie.spin = 0; } }
 
   // ---- rare delights + living weather ----
@@ -3002,9 +3050,10 @@ function drawPixie(tNow) {
 
   // big soft halo (dims as she falls asleep)
   g.globalCompositeOperation = 'lighter';
-  const haloR = (70 + mood * 40 + (pixie.fed || 0) * 22 + Math.sin(tNow * 2) * 4) * (0.7 + 0.3 * pixie.wake);
+  const tierGlow = pixie.tierGlow || 0;
+  const haloR = (70 + mood * 40 + (pixie.fed || 0) * 22 + tierGlow * 55 + Math.sin(tNow * 2) * 4) * (0.7 + 0.3 * pixie.wake);
   const halo = g.createRadialGradient(px, py, 0, px, py, haloR);
-  halo.addColorStop(0, `hsla(${hue}, 90%, 80%, ${(0.35 + mood * 0.25 + bondTier() * 0.05 + (pixie.fed || 0) * 0.08) * (0.4 + 0.6 * pixie.wake)})`);
+  halo.addColorStop(0, `hsla(${hue}, 90%, 80%, ${(0.35 + mood * 0.25 + bondTier() * 0.05 + (pixie.fed || 0) * 0.08 + tierGlow * 0.4) * (0.4 + 0.6 * pixie.wake)})`);
   halo.addColorStop(0.5, `hsla(${(hue + 40) % 360}, 90%, 70%, ${0.12 * (0.4 + 0.6 * pixie.wake)})`);
   halo.addColorStop(1, `hsla(${hue}, 90%, 70%, 0)`);
   g.fillStyle = halo;
@@ -3012,7 +3061,10 @@ function drawPixie(tNow) {
 
   // ---- wings (fold a little when sleepy) ----
   const flutter = Math.abs(Math.cos(pixie.flap));        // 0..1 perspective
-  if (bondTier() >= 2) drawWingPair(px, py, (hue + 40) % 360, flutter, 1.6, pixie.wake);  // an extra pair as your bond deepens
+  if (bondTier() >= 2) {                                 // an extra pair as your bond deepens
+    const wr = pixie.wingReveal || 0, wg = 1 - wr;        // unfurls on the tier it's earned
+    drawWingPair(px, py, (hue + 40) % 360, flutter, 1.6, pixie.wake, wg + Math.sin(wg * Math.PI) * 0.18);
+  }
   drawWingPair(px, py, hue, flutter, 1, pixie.wake);     // back pair
   // ---- body ----
   g.globalCompositeOperation = 'source-over';
@@ -3110,10 +3162,14 @@ function drawPixie(tNow) {
   drawWingPair(px, py, hue, flutter, -1, pixie.wake);
   g.globalCompositeOperation = 'source-over';
 
-  if (bondTier() >= 3) drawCrown(px, py, sleepy);   // a tiny crown at the deepest bond
+  if (bondTier() >= 3) {                            // a tiny crown at the deepest bond
+    const cr = pixie.crownReveal || 0, cg = 1 - cr;
+    drawCrown(px, py, sleepy, cg + Math.sin(cg * Math.PI) * 0.18);
+  }
 }
 
-function drawWingPair(px, py, hue, flutter, side, wakeAmt) {
+function drawWingPair(px, py, hue, flutter, side, wakeAmt, grow = 1) {
+  if (grow <= 0) return;                    // not yet unfurled
   g.globalCompositeOperation = 'lighter';
   const fold = 0.45 + 0.55 * wakeAmt;       // wings tuck in as she sleeps
   for (const dir of [-1, 1]) {
@@ -3122,8 +3178,8 @@ function drawWingPair(px, py, hue, flutter, side, wakeAmt) {
     // back pair sits slightly higher & wider
     const baseAngle = dir * (0.5 + (side > 0 ? 0.25 : 0) + (1 - wakeAmt) * 0.25);
     g.rotate(baseAngle + dir * 0.12 * Math.sin(pixie.flap));
-    const wingW = (22 + (side > 0 ? 6 : 0)) * (0.55 + 0.45 * flutter) * fold;
-    const wingH = (30 + (side > 0 ? 6 : 0)) * fold;
+    const wingW = (22 + (side > 0 ? 6 : 0)) * (0.55 + 0.45 * flutter) * fold * grow;
+    const wingH = (30 + (side > 0 ? 6 : 0)) * fold * grow;
     g.translate(dir * 6, -2);
     g.scale(dir, 1);
 
