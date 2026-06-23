@@ -140,44 +140,55 @@
   #mute:hover { opacity: 1; background: rgba(255,255,255,.14); }
   #mute svg { width: 20px; height: 20px; fill: #dfe7ff; }
 
-  /* rainbow pen toggle, tucked just under the sound button */
-  #rainbow {
-    position: fixed; top: 64px; right: 16px; width: 40px; height: 40px;
-    border: none; border-radius: 50%; cursor: pointer;
-    background: rgba(255,255,255,.06);
-    backdrop-filter: blur(6px);
-    display: grid; place-items: center;
-    opacity: .5; transition: opacity .25s, background .25s, box-shadow .25s;
-    z-index: 5;
+  /* the magical menu — a little wand that opens Pixie's box of tricks,
+     and the column of magical toys that springs open beneath it */
+  #magic {
+    position: fixed; top: 64px; right: 16px;
+    z-index: 6;
   }
-  #rainbow:hover { opacity: 1; background: rgba(255,255,255,.14); }
-  #rainbow svg { width: 22px; height: 22px; }
-  #rainbow.on {
+  #magic svg { transition: transform .35s ease; }
+  #magic.open {
     opacity: 1;
-    background: rgba(255,255,255,.14);
+    background: rgba(200,180,255,.16);
+    box-shadow: 0 0 14px 2px rgba(180,160,255,.4);
+  }
+  #magic.open svg { transform: rotate(-20deg) scale(1.06); }
+
+  #magicMenu {
+    position: fixed; top: 112px; right: 16px;
+    display: flex; flex-direction: column; gap: 8px;
+    z-index: 5;
+    opacity: 0; transform: translateY(-10px) scale(.94);
+    transform-origin: top center; pointer-events: none;
+    transition: opacity .26s ease, transform .26s ease;
+  }
+  #magicMenu.open { opacity: 1; transform: none; pointer-events: auto; }
+
+  /* shared look for every round magical button */
+  .magic-btn {
+    width: 40px; height: 40px; border: none; border-radius: 50%;
+    cursor: pointer; background: rgba(255,255,255,.06);
+    backdrop-filter: blur(6px); display: grid; place-items: center;
+    opacity: .62; transition: opacity .25s, background .25s, box-shadow .25s, transform .25s;
+  }
+  .magic-btn:hover { opacity: 1; background: rgba(255,255,255,.14); }
+  .magic-btn svg { width: 22px; height: 22px; }
+
+  /* rainbow pen */
+  #rainbow.on {
+    opacity: 1; background: rgba(255,255,255,.14);
     box-shadow: 0 0 14px 2px rgba(255,255,255,.28);
   }
 
-  /* golden rainbow — a rare pen, earned over time; hidden until she offers it */
-  #golden {
-    position: fixed; top: 160px; right: 16px; width: 40px; height: 40px;
-    border: none; border-radius: 50%; cursor: pointer;
-    background: rgba(255,255,255,.06);
-    backdrop-filter: blur(6px);
-    display: none; place-items: center;
-    opacity: .5; transition: opacity .25s, background .25s, box-shadow .25s;
-    z-index: 5;
-  }
-  #golden.shown { display: grid; }
-  #golden:hover { opacity: 1; background: rgba(255,255,255,.14); }
-  #golden svg { width: 22px; height: 22px; }
-  #golden.on {
-    opacity: 1;
-    background: rgba(255,210,120,.18);
+  /* the two rare golden toys stay hidden until Pixie offers them */
+  #golden, #treeGolden { display: none; }
+  #golden.shown, #treeGolden.shown { display: grid; }
+  #golden.on, #treeGolden.on {
+    opacity: 1; background: rgba(255,210,120,.18);
     box-shadow: 0 0 16px 3px rgba(255,196,84,.45);
   }
-  /* a one-time shimmer the first time she earns it */
-  #golden.reveal { animation: goldenReveal 2.8s ease-out 1; }
+  /* a one-time shimmer the first time each is earned */
+  #golden.reveal, #treeGolden.reveal { animation: goldenReveal 2.8s ease-out 1; }
   @keyframes goldenReveal {
     0%   { opacity: 0; transform: scale(.4); box-shadow: 0 0 0 0 rgba(255,196,84,0); }
     25%  { opacity: 1; transform: scale(1.25); box-shadow: 0 0 26px 8px rgba(255,210,120,.85); }
@@ -185,22 +196,14 @@
     100% { box-shadow: 0 0 0 0 rgba(255,196,84,0); opacity: .55; }
   }
 
-  /* magic tree toggle — summon the little tree, or tuck it away */
-  #tree {
-    position: fixed; top: 112px; right: 16px; width: 40px; height: 40px;
-    border: none; border-radius: 50%; cursor: pointer;
-    background: rgba(255,255,255,.06);
-    backdrop-filter: blur(6px);
-    display: grid; place-items: center;
-    opacity: .5; transition: opacity .25s, background .25s, box-shadow .25s;
-    z-index: 5;
-  }
-  #tree:hover { opacity: 1; background: rgba(255,255,255,.14); }
-  #tree svg { width: 22px; height: 22px; }
+  /* magic tree (green) + rainbow tree */
   #tree.on {
-    opacity: 1;
-    background: rgba(120,210,140,.18);
+    opacity: 1; background: rgba(120,210,140,.18);
     box-shadow: 0 0 14px 2px rgba(110,220,140,.42);
+  }
+  #treeRainbow.on {
+    opacity: 1; background: rgba(180,160,255,.18);
+    box-shadow: 0 0 14px 2px rgba(150,170,255,.42);
   }
 
   /* a tiny, one-time note that Pixie keeps a little anonymous visit data */
@@ -264,31 +267,64 @@
     <svg id="sndIcon" viewBox="0 0 24 24"><path d="M4 9v6h4l5 5V4L8 9H4zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4zM14 2.5v2.1a7 7 0 0 1 0 13.8v2.1A9 9 0 0 0 14 2.5z"/></svg>
   </button>
 
-  <button id="rainbow" aria-label="rainbow pen on/off" title="rainbow">
-    <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round">
-      <path d="M3 19 A9 9 0 0 1 21 19" stroke="#ff5d6c"/>
-      <path d="M6.4 19 A5.6 5.6 0 0 1 17.6 19" stroke="#ffcf4d"/>
-      <path d="M9.8 19 A2.2 2.2 0 0 1 14.2 19" stroke="#4db8ff"/>
+  <button id="magic" class="magic-btn" aria-label="magical menu" title="magic" aria-expanded="false" aria-controls="magicMenu">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#d8c8ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M5 19 L14.5 9.5"/>
+      <path d="M17.4 4 l.9 2.1 2.1.9 -2.1.9 -.9 2.1 -.9-2.1 -2.1-.9 2.1-.9z" fill="#ffe9a8" stroke="none"/>
+      <circle cx="6.6" cy="6" r="1" fill="#bfe0ff" stroke="none"/>
+      <circle cx="20" cy="14.4" r="1" fill="#bfe0ff" stroke="none"/>
     </svg>
   </button>
 
-  <button id="golden" aria-label="golden rainbow pen on/off" title="golden rainbow">
-    <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round">
-      <path d="M3 19 A9 9 0 0 1 21 19" stroke="#ffd86b"/>
-      <path d="M6.4 19 A5.6 5.6 0 0 1 17.6 19" stroke="#ffb347"/>
-      <path d="M9.8 19 A2.2 2.2 0 0 1 14.2 19" stroke="#ff9e3d"/>
-      <circle cx="12" cy="5.4" r="1.5" fill="#fff3c4"/>
-    </svg>
-  </button>
+  <div id="magicMenu" role="menu" aria-label="magical things">
+    <button id="rainbow" class="magic-btn" role="menuitemcheckbox" aria-checked="false" aria-label="rainbow pen on/off" title="rainbow">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round">
+        <path d="M3 19 A9 9 0 0 1 21 19" stroke="#ff5d6c"/>
+        <path d="M6.4 19 A5.6 5.6 0 0 1 17.6 19" stroke="#ffcf4d"/>
+        <path d="M9.8 19 A2.2 2.2 0 0 1 14.2 19" stroke="#4db8ff"/>
+      </svg>
+    </button>
 
-  <button id="tree" aria-label="magic tree on/off" title="magic tree">
-    <svg viewBox="0 0 24 24">
-      <rect x="11" y="13" width="2" height="8" rx="1" fill="#9a6b45"/>
-      <circle cx="12" cy="8.6" r="4.2" fill="#5fce7c"/>
-      <circle cx="8.3" cy="10.8" r="3.1" fill="#4cbb6c"/>
-      <circle cx="15.7" cy="10.8" r="3.1" fill="#74da8c"/>
-    </svg>
-  </button>
+    <button id="golden" class="magic-btn" role="menuitemcheckbox" aria-checked="false" aria-label="golden rainbow pen on/off" title="golden rainbow">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round">
+        <path d="M3 19 A9 9 0 0 1 21 19" stroke="#ffd86b"/>
+        <path d="M6.4 19 A5.6 5.6 0 0 1 17.6 19" stroke="#ffb347"/>
+        <path d="M9.8 19 A2.2 2.2 0 0 1 14.2 19" stroke="#ff9e3d"/>
+        <circle cx="12" cy="5.4" r="1.5" fill="#fff3c4"/>
+      </svg>
+    </button>
+
+    <button id="tree" class="magic-btn" role="menuitemcheckbox" aria-checked="false" aria-label="magic tree on/off" title="magic tree">
+      <svg viewBox="0 0 24 24">
+        <rect x="11" y="13" width="2" height="8" rx="1" fill="#9a6b45"/>
+        <circle cx="12" cy="8.6" r="4.2" fill="#5fce7c"/>
+        <circle cx="8.3" cy="10.8" r="3.1" fill="#4cbb6c"/>
+        <circle cx="15.7" cy="10.8" r="3.1" fill="#74da8c"/>
+      </svg>
+    </button>
+
+    <button id="treeRainbow" class="magic-btn" role="menuitemcheckbox" aria-checked="false" aria-label="rainbow tree on/off" title="rainbow tree">
+      <svg viewBox="0 0 24 24">
+        <rect x="11" y="13" width="2" height="8" rx="1" fill="#9a6b45"/>
+        <circle cx="12" cy="8.2" r="4" fill="#ff5d6c"/>
+        <circle cx="8.6" cy="11" r="2.9" fill="#ffcf4d"/>
+        <circle cx="15.4" cy="11" r="2.9" fill="#4db8ff"/>
+        <circle cx="12" cy="11.6" r="2.6" fill="#7bd87f"/>
+        <circle cx="9.9" cy="8.4" r="2.2" fill="#b07bff"/>
+        <circle cx="14.1" cy="8.4" r="2.2" fill="#ff9e3d"/>
+      </svg>
+    </button>
+
+    <button id="treeGolden" class="magic-btn" role="menuitemcheckbox" aria-checked="false" aria-label="golden tree on/off" title="golden tree">
+      <svg viewBox="0 0 24 24">
+        <rect x="11" y="13" width="2" height="8" rx="1" fill="#9a6b45"/>
+        <circle cx="12" cy="8.6" r="4.2" fill="#ffd86b"/>
+        <circle cx="8.3" cy="10.8" r="3.1" fill="#f5b942"/>
+        <circle cx="15.7" cy="10.8" r="3.1" fill="#ffe08a"/>
+        <circle cx="12" cy="3.5" r="1.3" fill="#fff3c4"/>
+      </svg>
+    </button>
+  </div>
 
   <!-- a tiny, one-time note about the little bit of data Pixie keeps -->
   <div id="privacy" role="dialog" aria-live="polite" aria-label="a little note about data" hidden>
@@ -319,6 +355,7 @@ let giftPending = save.lastGiftDay !== todayStr;     // a once-a-day little surp
 let treeThirsty = save.tree.lastWater !== todayStr;  // she dusts it with magic once a day
 let treeShown = save.treeShown !== false;            // toggle: full prominence vs a faint, dimmed ghost
 let treePlanted = save.treePlanted === true;         // brand-new visitors plant it on their first tap
+let treeTheme = 'green';                              // 'green' | 'rainbow' | 'golden' — the tree's skin this visit (kept ephemeral, like the golden pen)
 // how warmly she greets you, scaled by how long you were gone
 let welcomeBack = awayMs > 6 * 3600e3 ? 1 : awayMs > 30 * 60e3 ? 0.7 : awayMs > 3 * 60e3 ? 0.4 : 0;
 
@@ -739,9 +776,23 @@ function treeChime(pan = 0) {
   resumeAudio();
   if (!ctx) return;
   const t = ctx.currentTime + 0.02;
-  [60, 64, 67, 71, 74].forEach((n, i) =>
-    voice(n, t + i * 0.07, 0.5, { wave: 'sine', vol: 0.026, attack: 0.015, send: 0.5, pan: pan + (i / 5 - 0.4) * 0.3, detune: 3 }));
-  bell(83, t + 0.18, 0.035, 2.6); bell(88, t + 0.32, 0.025, 2.6);
+  if (treeTheme === 'golden') {                       // the richest, most magical bloom — warm chorus, a long glowing tail, and a cascade of sparkle
+    [60, 64, 67, 72, 76].forEach((n, i) => {
+      voice(n, t + i * 0.07, 0.95, { wave: 'triangle', vol: 0.024, attack: 0.012, send: 0.82, pan: pan + (i / 5 - 0.4) * 0.3, detune: -6 });
+      voice(n, t + i * 0.07, 0.95, { wave: 'triangle', vol: 0.015, attack: 0.012, send: 0.82, pan: pan + (i / 5 - 0.4) * 0.3, detune: 7 });   // chorus shimmer
+    });
+    voice(79, t + 0.14, 0.9, { wave: 'sine', vol: 0.014, send: 0.86, pan });           // soft glowing fifth
+    voice(84, t + 0.1, 0.8, { wave: 'sine', vol: 0.013, send: 0.86, pan });            // bright octave
+    [84, 91, 96, 103].forEach((n, i) => bell(n, t + 0.18 + i * 0.1, 0.03 - i * 0.005, 3.6));   // a climbing twinkle cascade
+  } else if (treeTheme === 'rainbow') {               // a brighter, sparklier spray for the rainbow tree
+    [60, 64, 67, 71, 74, 79].forEach((n, i) =>
+      voice(n, t + i * 0.06, 0.5, { wave: 'sine', vol: 0.022, attack: 0.01, send: 0.6, pan: pan + (i / 6 - 0.4) * 0.4, detune: 3 }));
+    bell(88, t + 0.16, 0.03, 2.4); bell(95, t + 0.3, 0.022, 2.4); bell(100, t + 0.44, 0.016, 2.0);
+  } else {
+    [60, 64, 67, 71, 74].forEach((n, i) =>
+      voice(n, t + i * 0.07, 0.5, { wave: 'sine', vol: 0.026, attack: 0.015, send: 0.5, pan: pan + (i / 5 - 0.4) * 0.3, detune: 3 }));
+    bell(83, t + 0.18, 0.035, 2.6); bell(88, t + 0.32, 0.025, 2.6);
+  }
 }
 /* The tree sings when you brush it. Its voice grows richer as the tree grows:
    a young sprout offers a couple of soft notes; a full tree answers with a wide
@@ -753,13 +804,29 @@ function treeChordEnter(stage, pan = 0) {
   const t0 = ctx.currentTime + 0.02;
   const arp = [60, 64, 67, 72, 74, 79];               // root, 3rd, 5th, octave, 9th, 12th
   const n = 2 + Math.round(g01 * 4);                   // 2..6 notes, more as it grows
+  const wave = treeTheme === 'golden' ? 'triangle' : 'sine';
   for (let i = 0; i < n; i++)
     voice(arp[i], t0 + i * 0.06, 0.7 + g01 * 0.8, {
-      wave: 'sine', vol: 0.02 + g01 * 0.012, attack: 0.02,
-      send: 0.4 + g01 * 0.3, pan: pan + (i / n - 0.5) * 0.3, detune: 3,
+      wave, vol: 0.02 + g01 * 0.012, attack: 0.02,
+      send: (treeTheme === 'green' ? 0.4 : 0.55) + g01 * 0.3, pan: pan + (i / n - 0.5) * 0.3,
+      detune: treeTheme === 'golden' ? 6 : 3,
     });
-  bell(84 + (g01 > 0.6 ? 7 : 0), t0 + 0.12, 0.028 + g01 * 0.02, 2.2 + g01 * 1.6);
-  if (g01 > 0.5) voice(86, t0 + 0.18, 1.2 + g01, { wave: 'triangle', vol: 0.012 + g01 * 0.008, send: 0.6, detune: 6, pan });
+  if (treeTheme === 'golden') {                        // a glowing crown — warm fifth, chorused octave, and a rising sparkle cascade
+    voice(arp[0] + 7, t0 + 0.1, 1.0 + g01, { wave: 'sine', vol: 0.012 + g01 * 0.008, send: 0.84, pan });        // fifth
+    voice(arp[0] + 12, t0 + 0.04, 0.85, { wave: 'sine', vol: 0.014, send: 0.86, pan, detune: -5 });             // octave (chorus)
+    voice(arp[0] + 12, t0 + 0.04, 0.85, { wave: 'sine', vol: 0.01, send: 0.86, pan, detune: 6 });
+    bell(91 + (g01 > 0.6 ? 5 : 0), t0 + 0.12, 0.03 + g01 * 0.02, 3.4 + g01 * 1.6);
+    const casc = [96, 100, 103, 108];                                                                           // glittering rising cascade, longer as it grows
+    const cn = 2 + Math.round(g01 * 2);
+    for (let i = 0; i < cn; i++) bell(casc[i], t0 + 0.2 + i * 0.09, 0.018, 2.8);
+  } else if (treeTheme === 'rainbow') {                // a bright twin-bell sparkle
+    bell(84 + (g01 > 0.5 ? 7 : 0), t0 + 0.12, 0.026 + g01 * 0.018, 2.0 + g01 * 1.2);
+    bell(96, t0 + 0.22, 0.016, 1.8);
+    if (g01 > 0.4) voice(91, t0 + 0.18, 0.5, { wave: 'sine', vol: 0.01, send: 0.65, pan });
+  } else {
+    bell(84 + (g01 > 0.6 ? 7 : 0), t0 + 0.12, 0.028 + g01 * 0.02, 2.2 + g01 * 1.6);
+    if (g01 > 0.5) voice(86, t0 + 0.18, 1.2 + g01, { wave: 'triangle', vol: 0.012 + g01 * 0.008, send: 0.6, detune: 6, pan });
+  }
 }
 function treeShimmer(stage, pan = 0) {
   resumeAudio(); if (!ctx) return;
@@ -767,9 +834,21 @@ function treeShimmer(stage, pan = 0) {
   const t0 = ctx.currentTime + 0.01;
   const span = 4 + Math.round(g01 * (TREE_SCALE.length - 4));   // wider note range as it grows
   const note = TREE_SCALE[Math.floor(Math.random() * span)];
-  voice(note, t0, 0.4 + g01 * 0.5, { wave: 'sine', vol: 0.015 + g01 * 0.01, attack: 0.01, send: 0.45 + g01 * 0.3, pan, detune: 2 });
-  if (g01 > 0.35 && Math.random() < 0.6) voice(note + 4, t0 + 0.02, 0.4, { wave: 'sine', vol: 0.009, send: 0.5, pan });   // harmony
-  if (g01 > 0.7 && Math.random() < 0.35) bell(note + 12, t0 + 0.03, 0.018, 1.6);                                          // high sparkle
+  if (treeTheme === 'golden') {                        // a warm chorused bell, a glowing fifth, and a glinting octave sparkle
+    voice(note, t0, 0.8 + g01 * 0.5, { wave: 'triangle', vol: 0.014 + g01 * 0.01, attack: 0.008, send: 0.74 + g01 * 0.2, pan, detune: -6 });
+    voice(note, t0, 0.8 + g01 * 0.5, { wave: 'triangle', vol: 0.009, attack: 0.008, send: 0.74, pan, detune: 7 });   // chorus shimmer
+    if (Math.random() < 0.7) voice(note + 7, t0 + 0.02, 0.6, { wave: 'sine', vol: 0.008, send: 0.82, pan });          // fifth
+    bell(note + 12, t0 + 0.02, 0.016 + g01 * 0.01, 2.8);
+    if (Math.random() < 0.5) bell(note + 19, t0 + 0.08, 0.012, 2.4);                                                  // high glint
+  } else if (treeTheme === 'rainbow') {                // a quick rising twinkle of light
+    voice(note, t0, 0.4 + g01 * 0.4, { wave: 'sine', vol: 0.013 + g01 * 0.008, attack: 0.006, send: 0.55 + g01 * 0.3, pan, detune: 2 });
+    bell(note + 12, t0 + 0.01, 0.012 + g01 * 0.008, 1.6);
+    if (Math.random() < 0.5) bell(note + 19, t0 + 0.03, 0.01, 1.3);
+  } else {
+    voice(note, t0, 0.4 + g01 * 0.5, { wave: 'sine', vol: 0.015 + g01 * 0.01, attack: 0.01, send: 0.45 + g01 * 0.3, pan, detune: 2 });
+    if (g01 > 0.35 && Math.random() < 0.6) voice(note + 4, t0 + 0.02, 0.4, { wave: 'sine', vol: 0.009, send: 0.5, pan });   // harmony
+    if (g01 > 0.7 && Math.random() < 0.35) bell(note + 12, t0 + 0.03, 0.018, 1.6);                                          // high sparkle
+  }
 }
 
 /* ---------- Canvas / render setup ------------------------- */
@@ -1085,6 +1164,18 @@ function stageGrowth() {
   const s = save.tree ? save.tree.stage : 0;
   return Math.min(1, 0.06 + 0.94 * (s / MAX_STAGE));   // a floor so stage 0 still shows a sprout
 }
+// ---- tree skin theming: leaf colour + the sparkles that drift off it ----
+function leafThemeHue(lf, tNow) {
+  if (treeTheme === 'rainbow') return ((lf.ph / 6.283) * 360 + tNow * 14) % 360;   // a slowly turning spectrum
+  if (treeTheme === 'golden')  return 42 + Math.sin(lf.ph * 1.6) * 8;              // warm gold, gently varied
+  return lf.hue;                                                                    // its own natural green
+}
+function treeSparkHue() {
+  if (treeTheme === 'rainbow') return Math.random() * 360;
+  if (treeTheme === 'golden')  return 40 + Math.random() * 16;
+  return 100 + Math.random() * 55;                                                  // greens
+}
+function treeSparkSat() { return treeTheme === 'green' ? 75 : (treeTheme === 'golden' ? 90 : 95); }
 const tree = {
   grow: stageGrowth(),                 // animated 0..1, eases toward the saved stage
   sip: treeThirsty ? 0 : 1,            // 1 freshly watered (content) .. 0 thirsty
@@ -1111,6 +1202,22 @@ let _leafSpr = null;
 // stays green instead of accumulating R/B channels into a pale wash-out
 const leafSprite = () => _leafSpr || (_leafSpr = bakeRadial(64,
   [[0, 'hsla(128,92%,48%,1)'], [0.5, 'hsla(125,88%,40%,0.5)'], [1, 'hsla(125,88%,40%,0)']]));
+// soft leaf glows for the rainbow / golden trees, baked per quantized hue so a
+// whole shimmering canopy is just a handful of cached sprites (no per-frame work)
+const _leafHueCache = new Map();
+function leafSpriteFor(hue) {
+  const key = (Math.round(hue / 12) * 12 + 360) % 360;
+  let s = _leafHueCache.get(key);
+  if (!s) {
+    s = bakeRadial(64, [
+      [0,   `hsla(${key},90%,58%,1)`],
+      [0.5, `hsla(${key},86%,48%,0.5)`],
+      [1,   `hsla(${key},86%,48%,0)`],
+    ]);
+    _leafHueCache.set(key, s);
+  }
+  return s;
+}
 
 // grow the branch/leaf skeleton once, deterministically from the saved seed
 function buildTree() {
@@ -1161,7 +1268,7 @@ function emitWaterDust(c, dt) {
     spawn(pixie.x + (Math.random() - 0.5) * 16, pixie.y + 8, {
       vx: (Math.random() - 0.5) * 12 + (c.x - pixie.x) * 0.35,
       vy: 28 + Math.random() * 34,
-      hue: 90 + Math.random() * 60, sat: 85,
+      hue: treeSparkHue(), sat: treeSparkSat(),
       size: 1.6 + Math.random() * 2.2, life: 0.9 + Math.random() * 0.6,
       glint: Math.random() < 0.5, grav: 24,
     });
@@ -1237,7 +1344,7 @@ function updateTree(dt) {
     const t = treeGeom(), c = screenToWorld(t.canopyX, t.canopyY);
     spawn(c.x + (Math.random() - 0.5) * t.size * 0.5, c.y + (Math.random() - 0.5) * t.size * 0.32, {
       vx: (Math.random() - 0.5) * 8, vy: -10 - Math.random() * 14,
-      hue: 100 + Math.random() * 55, sat: 70,
+      hue: treeSparkHue(), sat: treeSparkSat(),
       size: 1.3 + Math.random() * 1.8, life: 1.2 + Math.random(),
       glint: Math.random() < 0.4, grav: -5,
     });
@@ -1280,16 +1387,18 @@ function drawTree(tNow) {
     g.beginPath(); g.moveTo(ax(br.x1, br.y1), ay(br.y1)); g.lineTo(ax(ex, ey), ay(ey)); g.stroke();
   }
 
-  // leaves: a SOLID green base (so it reads as a real tree in daylight) ...
+  // leaves: a SOLID base (so it reads as a real tree in daylight) — green by
+  // default, or a shimmering rainbow / golden canopy under the themed trees ...
   const night = curSky ? curSky.star : 1;                    // 0 = full day .. 1 = night
+  const themed = treeTheme !== 'green';
   g.globalCompositeOperation = 'source-over';
   for (const lf of tree.leaves) {
     if (tree.grow <= lf.appearAt) continue;
     const a = Math.min(1, (tree.grow - lf.appearAt) / 0.08);
     const lx = ax(lf.x, lf.y), ly = ay(lf.y);
     const r = lf.r * t.size * a * (0.78 + 0.22 * sip);
-    g.globalAlpha = (0.5 + 0.32 * sip) * a * prom;               // its own natural green, just faded when dim
-    g.drawImage(leafSprite(), lx - r * 1.5, ly - r * 1.5, r * 3, r * 3);
+    g.globalAlpha = (0.5 + 0.32 * sip) * a * prom;               // its own colour, just faded when dim
+    g.drawImage(themed ? leafSpriteFor(leafThemeHue(lf, tNow)) : leafSprite(), lx - r * 1.5, ly - r * 1.5, r * 3, r * 3);
   }
   // ... then an additive glow on top (subtle by day, full magic at night)
   g.globalCompositeOperation = 'lighter';
@@ -1299,11 +1408,12 @@ function drawTree(tNow) {
     const lx = ax(lf.x, lf.y), ly = ay(lf.y);
     const breath = 0.85 + 0.15 * Math.sin(tNow * 1.2 + lf.ph);
     const r = lf.r * t.size * a * (0.7 + 0.3 * sip);
+    const hue = leafThemeHue(lf, tNow);
     const al = (0.08 + 0.12 * sip + 0.14 * tree.hoverGlow) * breath * a * (0.45 + 0.55 * night) * prom * glowFactor;
     g.globalAlpha = al;
-    g.drawImage(leafSprite(), lx - r * 1.7, ly - r * 1.7, r * 3.4, r * 3.4);
+    g.drawImage(themed ? leafSpriteFor(hue) : leafSprite(), lx - r * 1.7, ly - r * 1.7, r * 3.4, r * 3.4);
     g.globalAlpha = al * (0.5 + 0.5 * sip);
-    g.fillStyle = `hsl(${lf.hue}, ${70 + sip * 20}%, ${52 + sip * 14}%)`;
+    g.fillStyle = `hsl(${hue}, ${(themed ? 85 : 70) + sip * 20}%, ${(themed ? 56 : 52) + sip * 14}%)`;
     g.beginPath(); g.arc(lx, ly, r * 0.45, 0, 6.283); g.fill();
   }
   g.globalAlpha = 1;
@@ -2039,7 +2149,7 @@ function onMove(e) {
     if (!treeHovering) { treeHovering = true; treeChordEnter(save.tree.stage, treePan()); }
     tree.hoverGlow = Math.min(1, tree.hoverGlow + 0.3);
     if (tn - lastTreeNote > 0.12 && speed > 0.4) { lastTreeNote = tn; treeShimmer(save.tree.stage, treePan()); }
-    spawn(p.x, p.y, { vx: (Math.random() - 0.5) * 22, vy: -8 - Math.random() * 18, hue: 100 + Math.random() * 55, sat: 80, size: 1.4 + Math.random() * 1.8, life: 0.6 + Math.random() * 0.5, glint: Math.random() < 0.5, grav: -6 });
+    spawn(p.x, p.y, { vx: (Math.random() - 0.5) * 22, vy: -8 - Math.random() * 18, hue: treeSparkHue(), sat: treeSparkSat(), size: 1.4 + Math.random() * 1.8, life: 0.6 + Math.random() * 0.5, glint: Math.random() < 0.5, grav: -6 });
     return;                                     // brushing the tree is its own gentle interaction
   }
   treeHovering = false;
@@ -2437,6 +2547,24 @@ muteBtn.addEventListener('click', (e) => {
     : '<path d="M4 9v6h4l5 5V4L8 9H4zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4zM14 2.5v2.1a7 7 0 0 1 0 13.8v2.1A9 9 0 0 0 14 2.5z"/>';
 });
 
+/* the magical menu — a little wand that opens the column of magical toys.
+   The pens & trees live inside it, so there's room to add more magic later. */
+const magicBtn = document.getElementById('magic');
+const magicMenu = document.getElementById('magicMenu');
+let menuOpen = false;
+function setMenu(open) {
+  menuOpen = open;
+  magicBtn.classList.toggle('open', open);
+  magicMenu.classList.toggle('open', open);
+  magicBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+function openMenu() { if (!menuOpen) setMenu(true); }   // pop it open when a new toy is revealed
+magicBtn.addEventListener('click', (e) => {
+  e.stopPropagation(); ensureAudio(); resumeAudio();
+  setMenu(!menuOpen);
+  if (menuOpen) twinkle(0.3, 0.7);
+});
+
 /* rainbow pen toggle */
 const rainbowBtn = document.getElementById('rainbow');
 let rainbowMode = false;
@@ -2472,28 +2600,46 @@ rainbowBtn.addEventListener('click', (e) => {
 /* golden rainbow — a gentle reward for time spent together *this visit*. It's never
    permanent: every session starts without it, and once you've played a few minutes
    (counting only time she's awake, so wandering off pauses the clock) it quietly appears. */
-const GOLDEN_SECONDS = 180;                          // ~3 minutes of awake play
+const GOLDEN_SECONDS = 180;                          // ~3 minutes of awake play before the golden pen appears
+const GOLDEN_TREE_SECONDS = 300;                     // ~5 minutes before the golden tree quietly arrives
 const goldenBtn = document.getElementById('golden');
 let goldenMode = false;
-let sessionPlay = 0, goldenShown = false;
+let sessionPlay = 0, goldenShown = false, goldenTreeShown = false;
 
-function revealGolden() {
-  goldenBtn.classList.add('shown', 'reveal');
-  playGolden('crystal');                             // a soft bell flourish, not a fanfare
-  auroraFlash = Math.max(auroraFlash, 0.45);
-  mood = Math.min(1, mood + 0.25); pixie.joy = Math.min(1, pixie.joy + 0.6);
-  for (let i = 0; i < 18; i++) {                     // a gentle golden shimmer around her
-    const a = (i / 18) * Math.PI * 2;
-    spawn(pixie.x + Math.cos(a) * 14, pixie.y + Math.sin(a) * 14, {
+// a gentle golden shimmer blooming around a point (her, or the tree)
+function goldenSparkle(x, y, n) {
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    spawn(x + Math.cos(a) * 14, y + Math.sin(a) * 14, {
       vx: Math.cos(a) * 70, vy: Math.sin(a) * 70, hue: 42 + Math.random() * 14, sat: 90,
       size: 2 + Math.random() * 2, life: 1 + Math.random() * 0.6, glint: true, grav: -2,
     });
   }
 }
+function revealGolden() {
+  goldenBtn.classList.add('shown', 'reveal');
+  openMenu();                                        // so you notice the new toy
+  playGolden('crystal');                             // a soft bell flourish, not a fanfare
+  auroraFlash = Math.max(auroraFlash, 0.45);
+  mood = Math.min(1, mood + 0.25); pixie.joy = Math.min(1, pixie.joy + 0.6);
+  goldenSparkle(pixie.x, pixie.y, 18);
+}
+// the golden tree — earned the same way: a few minutes of play, or three quick
+// taps on the rainbow tree. Like the golden pen, it's a per-visit treat.
+function revealGoldenTree() {
+  treeGoldenBtn.classList.add('shown', 'reveal');
+  openMenu();
+  playGolden('crystal');
+  auroraFlash = Math.max(auroraFlash, 0.45);
+  mood = Math.min(1, mood + 0.2); pixie.joy = Math.min(1, pixie.joy + 0.5);
+  const c = treePlanted ? canopyWorld() : { x: pixie.x, y: pixie.y };
+  goldenSparkle(c.x, c.y, 18);
+}
 function checkGoldenUnlock(dt) {
-  if (goldenShown || !started || pixie.wake <= 0.3) return;   // count drowsy-but-present too; only a real doze-off (0.1) pauses it
+  if (!started || pixie.wake <= 0.3) return;   // count drowsy-but-present too; only a real doze-off (0.1) pauses it
   sessionPlay += dt;
-  if (sessionPlay >= GOLDEN_SECONDS) { goldenShown = true; revealGolden(); }
+  if (!goldenShown && sessionPlay >= GOLDEN_SECONDS) { goldenShown = true; revealGolden(); }
+  if (!goldenTreeShown && sessionPlay >= GOLDEN_TREE_SECONDS) { goldenTreeShown = true; revealGoldenTree(); }
 }
 
 goldenBtn.addEventListener('click', (e) => {
@@ -2513,33 +2659,73 @@ goldenBtn.addEventListener('click', (e) => {
   }
 });
 
-/* magic tree button. First tap *plants* it — it blooms into being in a shower of
-   magic and grows forever after. Once planted, the button only sets prominence:
-   full, or a faint dimmed ghost. It keeps growing & being watered either way. */
+/* magic tree buttons — three skins of the same little tree: green, rainbow, golden.
+   The first tap on any of them *plants* it (a one-time bloom); after that they act
+   as a radio group that sets the tree's skin, and tapping the active one tucks the
+   tree away to a faint ghost. The golden skin is the rare, earned one. */
 const treeBtn = document.getElementById('tree');
-treeBtn.classList.toggle('on', treePlanted && treeShown);
+const treeRainbowBtn = document.getElementById('treeRainbow');
+const treeGoldenBtn = document.getElementById('treeGolden');
+let treeRainbowTaps = [];                            // secret knock: 3 quick taps coax out the golden tree
+function refreshTreeButtons() {                      // only the active skin glows, and only while shown
+  const active = treePlanted && treeShown;
+  treeBtn.classList.toggle('on', active && treeTheme === 'green');
+  treeRainbowBtn.classList.toggle('on', active && treeTheme === 'rainbow');
+  treeGoldenBtn.classList.toggle('on', active && treeTheme === 'golden');
+}
+refreshTreeButtons();
 function plantTree() {                              // the one-time reveal
   treePlanted = true; treeShown = true;
   save.treePlanted = true; save.treeShown = true; persist();
-  treeBtn.classList.add('on');
+  refreshTreeButtons();
   ensureTree();
   const c = canopyWorld();
   treeChordEnter(save.tree.stage, treePan());
-  ring(c.x, c.y, 26, 8, { speed: 95, hue: 115 });
-  burst(c.x, c.y, 22, { speed: 80, hue: 120, sat: 82, grav: -14 });
+  ring(c.x, c.y, 26, 8, { speed: 95, hue: treeTheme === 'golden' ? 46 : treeTheme === 'rainbow' ? 280 : 115 });
+  burst(c.x, c.y, 22, { speed: 80, hue: treeSparkHue(), sat: treeSparkSat(), grav: -14 });
   auroraFlash = Math.max(auroraFlash, 0.3);
   mood = Math.min(1, mood + 0.12); pixie.joy = Math.min(1, pixie.joy + 0.3);
   if (treeThirsty) tree.errandT = 24 + Math.random() * 16;   // she'll tend it if you don't tap the droplet
 }
 function setTreeShown(on) {                         // gentle dim/undim, no big bloom
   treeShown = on; save.treeShown = on; persist();
-  treeBtn.classList.toggle('on', on);
+  refreshTreeButtons();
   twinkle(treePan(), on ? 0.8 : 0.4);
 }
-treeBtn.addEventListener('click', (e) => {
-  e.stopPropagation(); ensureAudio(); resumeAudio();
-  if (!treePlanted) plantTree(); else setTreeShown(!treeShown);
+function selectTreeTheme(theme) {
+  ensureAudio(); resumeAudio();
+  if (!treePlanted) { treeTheme = theme; plantTree(); return; }   // first tap plants it in this skin
+  if (treeShown && treeTheme === theme) { setTreeShown(false); return; }   // tapping the active skin tucks it away
+  treeTheme = theme;
+  if (!treeShown) { treeShown = true; save.treeShown = true; persist(); }
+  refreshTreeButtons();
+  // a themed flourish as the canopy changes its colours
+  treeChordEnter(save.tree.stage, treePan());
+  const c = canopyWorld();
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    spawn(c.x + Math.cos(a) * 12, c.y + Math.sin(a) * 12, {
+      vx: Math.cos(a) * 70, vy: Math.sin(a) * 70, hue: treeSparkHue(), sat: treeSparkSat(),
+      size: 2 + Math.random() * 2, life: 0.8 + Math.random() * 0.6, glint: true, grav: -6,
+    });
+  }
+  auroraFlash = Math.max(auroraFlash, 0.22);
+}
+treeBtn.addEventListener('click', (e) => { e.stopPropagation(); selectTreeTheme('green'); });
+treeRainbowBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  selectTreeTheme('rainbow');
+  // easter egg — three quick rainbow-tree taps coax out the golden tree early
+  const tNow = now();
+  treeRainbowTaps = treeRainbowTaps.filter(t => tNow - t < 1.2);
+  treeRainbowTaps.push(tNow);
+  if (treeRainbowTaps.length >= 3 && !goldenTreeShown) {
+    treeRainbowTaps = [];
+    goldenTreeShown = true;
+    revealGoldenTree();
+  }
 });
+treeGoldenBtn.addEventListener('click', (e) => { e.stopPropagation(); selectTreeTheme('golden'); });
 
 /* ---------- Loop ------------------------------------------ */
 let auroraFlash = 0;

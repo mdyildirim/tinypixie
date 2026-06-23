@@ -1,7 +1,7 @@
 /* Pixie service worker — makes her installable & playable offline.
    Everything she needs is self-contained, so a cache-first strategy
    means once you've visited, she works with no network at all. */
-const CACHE = 'pixie-v17';
+const CACHE = 'pixie-v18';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', (e) => {
